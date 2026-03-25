@@ -1,0 +1,71 @@
+import heroImage from "@/assets/hero-school.jpg";
+
+const HeroSection = () => {
+  return (
+    <section className="relative pt-20 md:pt-24 overflow-hidden">
+      {/* Background image */}
+      <div className="absolute inset-0">
+        <img
+          src={heroImage}
+          alt="Itain-Bell Schools campus"
+          className="w-full h-full object-cover"
+          width={1920}
+          height={1080}
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-foreground/80 via-foreground/60 to-foreground/30" />
+      </div>
+
+      <div className="relative container py-24 md:py-36 lg:py-44">
+        <div className="max-w-2xl space-y-6">
+          <span className="inline-block px-4 py-1.5 rounded-full bg-secondary/20 text-secondary text-sm font-semibold backdrop-blur-sm border border-secondary/30">
+            Welcome to Itain‑Bell Schools
+          </span>
+
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading text-primary-foreground leading-tight">
+            Getting better every day in every way.
+          </h1>
+
+          <p className="text-lg text-primary-foreground/80 font-body max-w-xl">
+            We provide a safe, happy environment where every child builds strong
+            academic foundations and essential life skills.
+          </p>
+
+          <div className="flex flex-wrap gap-4 pt-2">
+            <a
+              href="#admissions"
+              className="px-7 py-3.5 rounded-lg hero-gradient text-primary-foreground font-semibold hover:opacity-90 transition-opacity shadow-elevated"
+            >
+              Apply Now
+            </a>
+            <a
+              href="#contact"
+              className="px-7 py-3.5 rounded-lg bg-primary-foreground/10 text-primary-foreground font-semibold backdrop-blur-sm border border-primary-foreground/20 hover:bg-primary-foreground/20 transition-colors"
+            >
+              Book a Visit
+            </a>
+          </div>
+
+          {/* Stats */}
+          <div className="flex gap-8 pt-6">
+            <div className="text-center">
+              <div className="text-3xl font-heading text-primary-foreground">25+</div>
+              <div className="text-sm text-primary-foreground/70">Clubs & Activities</div>
+            </div>
+            <div className="w-px bg-primary-foreground/20" />
+            <div className="text-center">
+              <div className="text-3xl font-heading text-primary-foreground">2010</div>
+              <div className="text-sm text-primary-foreground/70">Year Established</div>
+            </div>
+            <div className="w-px bg-primary-foreground/20" />
+            <div className="text-center">
+              <div className="text-3xl font-heading text-primary-foreground">3:1</div>
+              <div className="text-sm text-primary-foreground/70">Min. Child Ratio</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+export default HeroSection;
