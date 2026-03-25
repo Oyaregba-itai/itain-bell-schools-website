@@ -35,12 +35,12 @@ const Navbar = () => {
               {link.label}
             </a>
           ))}
-          <a
-            href="#admissions"
-            className="px-5 py-2.5 rounded-lg hero-gradient text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
+          <Link
+            to="/login"
+            className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg hero-gradient text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
           >
-            Apply Now
-          </a>
+            <LogIn size={16} /> Portal Login
+          </Link>
         </div>
 
         {/* Mobile toggle */}
