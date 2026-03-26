@@ -15,6 +15,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
 
   const adminTabs = [
     { id: "overview", label: "Overview", icon: BarChart3 },
+    { id: "requests", label: "Requests", icon: Users },
     { id: "users", label: "Manage Users", icon: Users },
     { id: "classes", label: "Classes", icon: BookOpen },
     { id: "students", label: "Students", icon: GraduationCap },
