@@ -67,6 +67,114 @@ const AdminOverview = () => {
   );
 };
 
+const ManageRequests = () => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { session } = useAuth();
+
+  const { data: requests } = useQuery({
+    queryKey: ["registration-requests"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("registration_requests")
+        .select("*")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+      return data || [];
+    },
+  });
+
+  const approve = useMutation({
+    mutationFn: async (req: any) => {
+      const tempPassword = Math.random().toString(36).slice(-8) + "A1!";
+      const res = await supabase.functions.invoke("create-user", {
+        body: {
+          email: req.email,
+          password: tempPassword,
+          full_name: req.full_name,
+          phone: req.phone,
+          role: req.role,
+          request_id: req.id,
+        },
+      });
+      if (res.error) throw new Error(res.error.message);
+      if (res.data?.error) throw new Error(res.data.error);
+      return { ...res.data, tempPassword };
+    },
+    onSuccess: (data) => {
+      toast({ title: "Account created!", description: `Temporary password: ${data.tempPassword}. Share this with the user.` });
+      queryClient.invalidateQueries({ queryKey: ["registration-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["all-users"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const reject = useMutation({
+    mutationFn: async (requestId: string) => {
+      const res = await supabase.functions.invoke("manage-registration", {
+        body: { action: "reject", request_id: requestId },
+      });
+      if (res.error) throw new Error(res.error.message);
+      if (res.data?.error) throw new Error(res.data.error);
+    },
+    onSuccess: () => {
+      toast({ title: "Request rejected" });
+      queryClient.invalidateQueries({ queryKey: ["registration-requests"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <div>
+      <h3 className="text-lg font-heading text-foreground mb-6">Pending Registration Requests</h3>
+      {(!requests || requests.length === 0) ? (
+        <div className="bg-card rounded-xl p-8 shadow-card text-center">
+          <ClipboardCheck className="mx-auto mb-3 text-muted-foreground" size={40} />
+          <p className="text-muted-foreground">No pending requests</p>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {requests.map((req) => (
+            <div key={req.id} className="bg-card rounded-xl p-5 shadow-card">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="font-semibold text-foreground">{req.full_name}</div>
+                  <div className="text-sm text-muted-foreground">{req.email}</div>
+                  {req.phone && <div className="text-sm text-muted-foreground">{req.phone}</div>}
+                  <span className="inline-block mt-2 px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium capitalize">{req.role}</span>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    className="hero-gradient"
+                    onClick={() => approve.mutate(req)}
+                    disabled={approve.isPending}
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                    onClick={() => reject.mutate(req.id)}
+                    disabled={reject.isPending}
+                  >
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ManageUsers = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
