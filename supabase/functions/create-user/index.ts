@@ -47,7 +47,7 @@ serve(async (req) => {
       });
     }
 
-    const { email, password, full_name, phone, role } = await req.json();
+    const { email, password, full_name, phone, role, request_id } = await req.json();
 
     if (!email || !password || !full_name || !role) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
@@ -82,6 +82,14 @@ serve(async (req) => {
       user_id: newUser.user.id,
       role,
     });
+
+    // If approving a registration request, update its status
+    if (request_id) {
+      await supabaseAdmin
+        .from("registration_requests")
+        .update({ status: "approved", reviewed_at: new Date().toISOString(), reviewed_by: caller.id })
+        .eq("id", request_id);
+    }
 
     return new Response(
       JSON.stringify({ user: newUser.user, message: "User created successfully" }),
