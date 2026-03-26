@@ -17,6 +17,7 @@ const AdminDashboard = () => {
   return (
     <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
       {activeTab === "overview" && <AdminOverview />}
+      {activeTab === "requests" && <ManageRequests />}
       {activeTab === "users" && <ManageUsers />}
       {activeTab === "classes" && <ManageClasses />}
       {activeTab === "students" && <ManageStudents />}
