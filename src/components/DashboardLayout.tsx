@@ -39,6 +39,8 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
   const parentTabs = [
     { id: "overview", label: "Overview", icon: BarChart3 },
     { id: "results", label: "My Children's Results", icon: GraduationCap },
+    { id: "timetable", label: "Timetable", icon: Clock },
+    { id: "announcements", label: "Announcements", icon: Megaphone },
   ];
 
   const tabs = role === "admin" ? adminTabs : role === "teacher" ? teacherTabs : parentTabs;
