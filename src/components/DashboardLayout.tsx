@@ -32,6 +32,8 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
     { id: "overview", label: "Overview", icon: BarChart3 },
     { id: "upload", label: "Upload Results", icon: BookOpen },
     { id: "my-results", label: "My Results", icon: BarChart3 },
+    { id: "timetable", label: "Timetable", icon: Clock },
+    { id: "announcements", label: "Announcements", icon: Megaphone },
   ];
 
   const parentTabs = [
