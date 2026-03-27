@@ -20,6 +20,8 @@ const TeacherDashboard = () => {
       {activeTab === "overview" && <TeacherOverview />}
       {activeTab === "upload" && <UploadResults />}
       {activeTab === "my-results" && <MyResults />}
+      {activeTab === "timetable" && <TimetableView />}
+      {activeTab === "announcements" && <AnnouncementsView />}
     </DashboardLayout>
   );
 };

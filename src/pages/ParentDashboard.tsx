@@ -14,6 +14,8 @@ const ParentDashboard = () => {
     <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
       {activeTab === "overview" && <ParentOverview />}
       {activeTab === "results" && <ChildrenResults />}
+      {activeTab === "timetable" && <TimetableView />}
+      {activeTab === "announcements" && <AnnouncementsView />}
     </DashboardLayout>
   );
 };

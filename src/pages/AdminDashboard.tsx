@@ -26,6 +26,8 @@ const AdminDashboard = () => {
       {activeTab === "subjects" && <ManageSubjects />}
       {activeTab === "terms" && <ManageTerms />}
       {activeTab === "results" && <ViewAllResults />}
+      {activeTab === "announcements" && <AnnouncementsView />}
+      {activeTab === "timetable" && <TimetableView />}
     </DashboardLayout>
   );
 };
