@@ -18,13 +18,20 @@ const roles: { value: PortalRole; label: string; icon: React.ReactNode; descript
 ];
 
 const LoginPage = () => {
-  const { signIn } = useAuth();
+  const { signIn, user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [selectedRole, setSelectedRole] = useState<PortalRole | null>(null);
   const [mode, setMode] = useState<"select" | "login" | "register">("select");
+
+  useEffect(() => {
+    if (user) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user, navigate]);
 
   // Registration form
   const [regForm, setRegForm] = useState({ full_name: "", email: "", phone: "", role: "" as string });
