@@ -101,7 +101,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
       <main className="flex-1 md:ml-64">
         <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-border px-6 py-4 flex items-center justify-between">
           <button onClick={() => setSidebarOpen(true)} className="md:hidden text-foreground">
-            <Settings size={20} />
+            <Menu size={20} />
           </button>
           <h2 className="font-heading text-lg text-foreground capitalize">
             {tabs.find(t => t.id === activeTab)?.label}
