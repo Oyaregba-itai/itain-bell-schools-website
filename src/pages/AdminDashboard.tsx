@@ -10,6 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck } from "lucide-react";
+import AnnouncementsView from "@/components/AnnouncementsView";
+import TimetableView from "@/components/TimetableView";
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -24,6 +26,8 @@ const AdminDashboard = () => {
       {activeTab === "subjects" && <ManageSubjects />}
       {activeTab === "terms" && <ManageTerms />}
       {activeTab === "results" && <ViewAllResults />}
+      {activeTab === "announcements" && <AnnouncementsView />}
+      {activeTab === "timetable" && <TimetableView />}
     </DashboardLayout>
   );
 };

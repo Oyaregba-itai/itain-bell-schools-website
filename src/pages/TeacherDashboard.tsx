@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { GraduationCap, BookOpen } from "lucide-react";
+import AnnouncementsView from "@/components/AnnouncementsView";
+import TimetableView from "@/components/TimetableView";
 
 const TeacherDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -18,6 +20,8 @@ const TeacherDashboard = () => {
       {activeTab === "overview" && <TeacherOverview />}
       {activeTab === "upload" && <UploadResults />}
       {activeTab === "my-results" && <MyResults />}
+      {activeTab === "timetable" && <TimetableView />}
+      {activeTab === "announcements" && <AnnouncementsView />}
     </DashboardLayout>
   );
 };

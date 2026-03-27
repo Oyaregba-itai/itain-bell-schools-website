@@ -1,6 +1,7 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, Users, BookOpen, GraduationCap, BarChart3, Settings, Calendar } from "lucide-react";
+import { LogOut, Users, BookOpen, GraduationCap, BarChart3, Calendar, Megaphone, Clock, Menu, ArrowLeft } from "lucide-react";
 import { ReactNode, useState } from "react";
 
 interface DashboardLayoutProps {
@@ -11,6 +12,7 @@ interface DashboardLayoutProps {
 
 const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutProps) => {
   const { profile, role, signOut } = useAuth();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const adminTabs = [
@@ -22,17 +24,23 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
     { id: "subjects", label: "Subjects", icon: BookOpen },
     { id: "terms", label: "Terms", icon: Calendar },
     { id: "results", label: "All Results", icon: BarChart3 },
+    { id: "announcements", label: "Announcements", icon: Megaphone },
+    { id: "timetable", label: "Timetable", icon: Clock },
   ];
 
   const teacherTabs = [
     { id: "overview", label: "Overview", icon: BarChart3 },
     { id: "upload", label: "Upload Results", icon: BookOpen },
     { id: "my-results", label: "My Results", icon: BarChart3 },
+    { id: "timetable", label: "Timetable", icon: Clock },
+    { id: "announcements", label: "Announcements", icon: Megaphone },
   ];
 
   const parentTabs = [
     { id: "overview", label: "Overview", icon: BarChart3 },
     { id: "results", label: "My Children's Results", icon: GraduationCap },
+    { id: "timetable", label: "Timetable", icon: Clock },
+    { id: "announcements", label: "Announcements", icon: Megaphone },
   ];
 
   const tabs = role === "admin" ? adminTabs : role === "teacher" ? teacherTabs : parentTabs;
@@ -79,6 +87,9 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
             <Button variant="ghost" size="sm" onClick={signOut} className="mt-2 w-full justify-start text-muted-foreground">
               <LogOut size={16} className="mr-2" /> Sign Out
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="w-full justify-start text-muted-foreground">
+              <ArrowLeft size={16} className="mr-2" /> Back to Website
+            </Button>
           </div>
         </div>
       </aside>
@@ -90,7 +101,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
       <main className="flex-1 md:ml-64">
         <header className="sticky top-0 z-30 bg-card/90 backdrop-blur-md border-b border-border px-6 py-4 flex items-center justify-between">
           <button onClick={() => setSidebarOpen(true)} className="md:hidden text-foreground">
-            <Settings size={20} />
+            <Menu size={20} />
           </button>
           <h2 className="font-heading text-lg text-foreground capitalize">
             {tabs.find(t => t.id === activeTab)?.label}
