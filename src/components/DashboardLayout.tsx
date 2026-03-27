@@ -12,6 +12,7 @@ interface DashboardLayoutProps {
 
 const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutProps) => {
   const { profile, role, signOut } = useAuth();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const adminTabs = [
