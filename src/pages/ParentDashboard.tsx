@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardLayout from "@/components/DashboardLayout";
 import { GraduationCap } from "lucide-react";
+import AnnouncementsView from "@/components/AnnouncementsView";
+import TimetableView from "@/components/TimetableView";
 
 const ParentDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
