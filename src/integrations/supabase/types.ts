@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      announcements: {
+        Row: {
+          content: string
+          created_at: string
+          created_by: string
+          id: string
+          target_role: string
+          title: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          created_by: string
+          id?: string
+          target_role?: string
+          title: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          target_role?: string
+          title?: string
+        }
+        Relationships: []
+      }
       classes: {
         Row: {
           created_at: string
@@ -278,6 +305,51 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      timetable_entries: {
+        Row: {
+          class_id: string
+          created_at: string
+          day_of_week: string
+          end_time: string
+          id: string
+          start_time: string
+          subject_id: string
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          day_of_week: string
+          end_time: string
+          id?: string
+          start_time: string
+          subject_id: string
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          day_of_week?: string
+          end_time?: string
+          id?: string
+          start_time?: string
+          subject_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "timetable_entries_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timetable_entries_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "subjects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
