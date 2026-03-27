@@ -87,6 +87,9 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
             <Button variant="ghost" size="sm" onClick={signOut} className="mt-2 w-full justify-start text-muted-foreground">
               <LogOut size={16} className="mr-2" /> Sign Out
             </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="w-full justify-start text-muted-foreground">
+              <ArrowLeft size={16} className="mr-2" /> Back to Website
+            </Button>
           </div>
         </div>
       </aside>
