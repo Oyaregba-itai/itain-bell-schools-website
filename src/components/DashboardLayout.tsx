@@ -24,6 +24,8 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
     { id: "subjects", label: "Subjects", icon: BookOpen },
     { id: "terms", label: "Terms", icon: Calendar },
     { id: "results", label: "All Results", icon: BarChart3 },
+    { id: "announcements", label: "Announcements", icon: Megaphone },
+    { id: "timetable", label: "Timetable", icon: Clock },
   ];
 
   const teacherTabs = [
