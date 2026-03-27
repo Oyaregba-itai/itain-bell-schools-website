@@ -1,6 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, Users, BookOpen, GraduationCap, BarChart3, Settings, Calendar } from "lucide-react";
+import { LogOut, Users, BookOpen, GraduationCap, BarChart3, Calendar, Megaphone, Clock, Menu, ArrowLeft } from "lucide-react";
 import { ReactNode, useState } from "react";
 
 interface DashboardLayoutProps {
