@@ -1,4 +1,5 @@
 import { MapPin, Phone, Mail, Clock } from "lucide-react";
+import schoolLogo from "@/assets/school-logo.png";
 
 const Footer = () => {
   return (
@@ -8,9 +9,7 @@ const Footer = () => {
           {/* Brand */}
           <div className="lg:col-span-1">
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-9 h-9 rounded-full green-gradient flex items-center justify-center">
-                <span className="text-primary-foreground font-heading text-sm">IB</span>
-              </div>
+              <img src={schoolLogo} alt="School Logo" className="h-9 w-auto" />
               <span className="font-heading text-lg">Itain‑Bell Schools</span>
             </div>
             <p className="text-primary-foreground/60 text-sm leading-relaxed">

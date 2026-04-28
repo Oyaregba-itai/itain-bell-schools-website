@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LogOut, Users, BookOpen, GraduationCap, BarChart3, Calendar, Megaphone, Clock, Menu, ArrowLeft } from "lucide-react";
 import { ReactNode, useState } from "react";
+import schoolLogo from "@/assets/school-logo.png";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -54,9 +55,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
         <div className="flex flex-col h-full">
           <div className="p-5 border-b border-border">
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-full hero-gradient flex items-center justify-center">
-                <span className="text-primary-foreground font-heading text-sm">IB</span>
-              </div>
+              <img src={schoolLogo} alt="School Logo" className="h-9 w-auto" />
               <div>
                 <div className="font-heading text-sm text-foreground">Itain‑Bell</div>
                 <div className="text-xs text-muted-foreground">{roleLabel} Portal</div>

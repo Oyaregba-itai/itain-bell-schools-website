@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/firebase/config";
+import { collection, query, orderBy, getDocs, addDoc, Timestamp } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -22,34 +23,51 @@ const TimetableView = () => {
 
   const { data: classes } = useQuery({
     queryKey: ["classes"],
-    queryFn: async () => { const { data } = await supabase.from("classes").select("*").order("name"); return data || []; },
+    queryFn: async () => {
+      const q = query(collection(db, "classes"), orderBy("name"));
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    },
   });
 
   const { data: subjects } = useQuery({
     queryKey: ["subjects"],
-    queryFn: async () => { const { data } = await supabase.from("subjects").select("*, classes(name)"); return data || []; },
+    queryFn: async () => {
+      const q = query(collection(db, "subjects"));
+      const querySnapshot = await getDocs(q);
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    },
   });
 
   const { data: entries } = useQuery({
     queryKey: ["timetable", selectedClass],
     queryFn: async () => {
-      let query = supabase.from("timetable_entries").select("*, classes(name), subjects(name)");
-      if (selectedClass) query = query.eq("class_id", selectedClass);
-      const { data } = await query.order("day_of_week").order("start_time");
-      return data || [];
+      const q = query(
+        collection(db, "timetable_entries"),
+        orderBy("day_of_week"),
+        orderBy("start_time")
+      );
+      const querySnapshot = await getDocs(q);
+      let docs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      if (selectedClass && selectedClass !== "all") {
+        docs = docs.filter(d => d.class_id === selectedClass);
+      }
+      
+      return docs;
     },
   });
 
   const create = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("timetable_entries").insert({
+      await addDoc(collection(db, "timetable_entries"), {
         class_id: form.class_id,
         subject_id: form.subject_id,
         day_of_week: form.day_of_week,
         start_time: form.start_time,
         end_time: form.end_time,
+        created_at: Timestamp.now(),
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Timetable entry added" });
@@ -60,7 +78,7 @@ const TimetableView = () => {
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
-  const filteredSubjects = form.class_id ? subjects?.filter(s => s.class_id === form.class_id) : subjects;
+  const filteredSubjects = form.class_id ? subjects?.filter((s: any) => s.class_id === form.class_id) : subjects;
 
   return (
     <div>
@@ -70,8 +88,8 @@ const TimetableView = () => {
           <Select value={selectedClass} onValueChange={setSelectedClass}>
             <SelectTrigger className="w-48"><SelectValue placeholder="All classes" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Classes</SelectItem>
-              {classes?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              <SelectItem value="">All Classes</SelectItem>
+              {classes?.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
           {role === "admin" && (
@@ -86,14 +104,14 @@ const TimetableView = () => {
                     <Label>Class</Label>
                     <Select value={form.class_id} onValueChange={(v) => setForm({ ...form, class_id: v, subject_id: "" })}>
                       <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
-                      <SelectContent>{classes?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                      <SelectContent>{classes?.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div>
                     <Label>Subject</Label>
                     <Select value={form.subject_id} onValueChange={(v) => setForm({ ...form, subject_id: v })}>
                       <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
-                      <SelectContent>{filteredSubjects?.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                      <SelectContent>{filteredSubjects?.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div>
@@ -129,15 +147,19 @@ const TimetableView = () => {
               <div key={day}>
                 <h4 className="font-heading text-foreground mb-3">{day}</h4>
                 <div className="grid gap-2">
-                  {dayEntries.map(entry => (
-                    <div key={entry.id} className="bg-card rounded-xl p-4 shadow-card flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-foreground">{(entry as any).subjects?.name}</div>
-                        <div className="text-sm text-muted-foreground">{(entry as any).classes?.name}</div>
+                  {dayEntries.map(entry => {
+                    const className = classes?.find((c: any) => c.id === entry.class_id)?.name;
+                    const subjectName = subjects?.find((s: any) => s.id === entry.subject_id)?.name;
+                    return (
+                      <div key={entry.id} className="bg-card rounded-xl p-4 shadow-card flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-foreground">{subjectName}</div>
+                          <div className="text-sm text-muted-foreground">{className}</div>
+                        </div>
+                        <div className="text-sm font-medium text-primary">{entry.start_time} – {entry.end_time}</div>
                       </div>
-                      <div className="text-sm font-medium text-primary">{entry.start_time} – {entry.end_time}</div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );

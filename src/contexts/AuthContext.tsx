@@ -1,15 +1,22 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { User, Session } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import { User, signInWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged } from "firebase/auth";
+import { auth, db } from "@/integrations/firebase/config";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 
-type AppRole = Database["public"]["Enums"]["app_role"];
+export type AppRole = "admin" | "teacher" | "parent";
+
+interface Profile {
+  full_name: string;
+  email: string;
+  role: AppRole;
+  phone?: string;
+  created_at?: string;
+}
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
   role: AppRole | null;
-  profile: Database["public"]["Tables"]["profiles"]["Row"] | null;
+  profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -19,62 +26,73 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
-  const [profile, setProfile] = useState<Database["public"]["Tables"]["profiles"]["Row"] | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchUserData = async (userId: string) => {
-    const [{ data: roleData }, { data: profileData }] = await Promise.all([
-      supabase.from("user_roles").select("role").eq("user_id", userId).single(),
-      supabase.from("profiles").select("*").eq("user_id", userId).single(),
-    ]);
-    setRole(roleData?.role ?? null);
-    setProfile(profileData ?? null);
+    try {
+      // Get user profile from Firestore
+      const profileRef = doc(db, "profiles", userId);
+      const profileSnap = await getDoc(profileRef);
+      
+      if (profileSnap.exists()) {
+        const profileData = profileSnap.data() as Profile;
+        setProfile(profileData);
+        setRole(profileData.role);
+      } else {
+        // If profile doesn't exist, check user_roles collection
+        const rolesRef = collection(db, "user_roles");
+        const rolesQuery = query(rolesRef, where("user_id", "==", userId));
+        const rolesSnap = await getDocs(rolesQuery);
+        
+        if (!rolesSnap.empty) {
+          const roleData = rolesSnap.docs[0].data();
+          setRole(roleData.role);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+    }
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          setTimeout(() => fetchUserData(session.user.id), 0);
-        } else {
-          setRole(null);
-          setProfile(null);
-        }
-        setLoading(false);
-      }
-    );
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserData(session.user.id);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        await fetchUserData(currentUser.uid);
+      } else {
+        setRole(null);
+        setProfile(null);
       }
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => unsubscribe();
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error as Error | null };
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
-    setRole(null);
-    setProfile(null);
+    try {
+      await firebaseSignOut(auth);
+      setUser(null);
+      setRole(null);
+      setProfile(null);
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, role, profile, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, role, profile, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

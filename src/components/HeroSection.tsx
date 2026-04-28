@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
-import heroSchool from "@/assets/hero-school.jpg";
-import heroClassroom from "@/assets/hero-classroom.jpg";
-import heroSports from "@/assets/hero-sports.jpg";
-import heroCampus from "@/assets/hero-campus.jpg";
+import slideshowImage1 from "@/assets/slideshow-image.jpeg";
+import slideshowImage2 from "@/assets/slideshow-image-2.jpg";
+import slideshowImage3 from "@/assets/slideshow-image-3.jpg";
+import slideshowImage4 from "@/assets/slideshow-image-4.jpeg";
+import slideshowImage5 from "@/assets/slideshow-image-5.jpeg";
 
 const slides = [
-  { src: heroSchool, alt: "Itain-Bell Schools campus" },
-  { src: heroClassroom, alt: "Students learning in classroom" },
-  { src: heroSports, alt: "Students playing sports" },
-  { src: heroCampus, alt: "School building exterior" },
+  { src: slideshowImage1, alt: "School activities" },
+  { src: slideshowImage2, alt: "School events" },
+  { src: slideshowImage3, alt: "School activities" },
+  { src: slideshowImage4, alt: "School experience" },
+  { src: slideshowImage5, alt: "Campus life" },
 ];
 
 const HeroSection = () => {

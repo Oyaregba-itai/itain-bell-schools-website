@@ -6,8 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/firebase/config";
+import { collection, addDoc } from "firebase/firestore";
 import { ArrowLeft, GraduationCap, BookOpen, Shield, UserPlus } from "lucide-react";
+import schoolLogo from "@/assets/school-logo.png";
 
 type PortalRole = "parent" | "teacher" | "admin";
 
@@ -54,18 +56,20 @@ const LoginPage = () => {
       return;
     }
     setRegLoading(true);
-    const { error } = await supabase.from("registration_requests").insert({
-      full_name: regForm.full_name,
-      email: regForm.email,
-      phone: regForm.phone || null,
-      role: regForm.role as PortalRole,
-    });
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
+    try {
+      await addDoc(collection(db, "registration_requests"), {
+        full_name: regForm.full_name,
+        email: regForm.email,
+        phone: regForm.phone || null,
+        role: regForm.role as PortalRole,
+        created_at: new Date(),
+        approved: false,
+      });
       toast({ title: "Request submitted!", description: "The administrator will review your request and create your account." });
       setRegForm({ full_name: "", email: "", phone: "", role: "" });
       setMode("select");
+    } catch (error) {
+      toast({ title: "Error", description: (error as Error).message, variant: "destructive" });
     }
     setRegLoading(false);
   };
@@ -83,9 +87,7 @@ const LoginPage = () => {
 
         <div className="bg-card rounded-2xl shadow-elevated p-8">
           <div className="text-center mb-8">
-            <div className="w-14 h-14 rounded-full hero-gradient flex items-center justify-center mx-auto mb-4">
-              <span className="text-primary-foreground font-heading text-xl">IB</span>
-            </div>
+            <img src={schoolLogo} alt="School Logo" className="h-14 w-auto mx-auto mb-4" />
             <h1 className="text-2xl font-heading text-foreground">Itain‑Bell Portal</h1>
             <p className="text-muted-foreground text-sm mt-1">
               {mode === "register"

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/firebase/config";
+import { collection, getDocs, addDoc, query, where, Timestamp } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -32,11 +33,9 @@ const TeacherOverview = () => {
   const { data: stats } = useQuery({
     queryKey: ["teacher-stats", user?.id],
     queryFn: async () => {
-      const [subjects, results] = await Promise.all([
-        supabase.from("subjects").select("id", { count: "exact" }).eq("teacher_id", user!.id),
-        supabase.from("results").select("id", { count: "exact" }).eq("uploaded_by", user!.id),
-      ]);
-      return { subjects: subjects.count || 0, results: results.count || 0 };
+      const subjectsSnap = await getDocs(query(collection(db, "subjects"), where("teacher_id", "==", user!.id)));
+      const resultsSnap = await getDocs(query(collection(db, "results"), where("uploaded_by", "==", user!.id)));
+      return { subjects: subjectsSnap.size, results: resultsSnap.size };
     },
     enabled: !!user,
   });
@@ -66,39 +65,42 @@ const UploadResults = () => {
   const { data: subjects } = useQuery({
     queryKey: ["my-subjects", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("subjects").select("*, classes(name)").eq("teacher_id", user!.id);
-      return data || [];
+      const querySnapshot = await getDocs(query(collection(db, "subjects"), where("teacher_id", "==", user!.id)));
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     },
     enabled: !!user,
   });
 
   const { data: terms } = useQuery({
     queryKey: ["terms"],
-    queryFn: async () => { const { data } = await supabase.from("terms").select("*"); return data || []; },
+    queryFn: async () => { 
+      const querySnapshot = await getDocs(collection(db, "terms"));
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    },
   });
 
   // Get students for the selected subject's class
-  const selectedSubject = subjects?.find(s => s.id === form.subject_id);
+  const selectedSubject = subjects?.find((s: any) => s.id === form.subject_id);
   const { data: students } = useQuery({
     queryKey: ["class-students", selectedSubject?.class_id],
     queryFn: async () => {
-      const { data } = await supabase.from("students").select("*").eq("class_id", selectedSubject!.class_id!);
-      return data || [];
+      const querySnapshot = await getDocs(query(collection(db, "students"), where("class_id", "==", selectedSubject!.class_id)));
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     },
     enabled: !!selectedSubject?.class_id,
   });
 
   const upload = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("results").insert({
+      await addDoc(collection(db, "results"), {
         student_id: form.student_id,
         subject_id: form.subject_id,
         term_id: form.term_id,
         grade: form.grade,
         comment: form.comment || null,
         uploaded_by: user!.id,
+        created_at: Timestamp.now(),
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Result uploaded successfully" });
@@ -116,14 +118,14 @@ const UploadResults = () => {
           <Label>Subject</Label>
           <Select value={form.subject_id} onValueChange={(v) => setForm({ ...form, subject_id: v, student_id: "" })}>
             <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
-            <SelectContent>{subjects?.map(s => <SelectItem key={s.id} value={s.id}>{s.name} — {(s as any).classes?.name}</SelectItem>)}</SelectContent>
+            <SelectContent>{subjects?.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div>
           <Label>Student</Label>
           <Select value={form.student_id} onValueChange={(v) => setForm({ ...form, student_id: v })}>
             <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
-            <SelectContent>{students?.map(s => <SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>)}</SelectContent>
+            <SelectContent>{students?.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div>
@@ -157,18 +159,36 @@ const UploadResults = () => {
 const MyResults = () => {
   const { user } = useAuth();
 
-  const { data: results } = useQuery({
+  const { data: allData } = useQuery({
     queryKey: ["my-results", user?.id],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("results")
-        .select("*, students(full_name), subjects(name), terms(name, academic_year)")
-        .eq("uploaded_by", user!.id)
-        .order("created_at", { ascending: false });
-      return data || [];
+      const resultsSnap = await getDocs(query(collection(db, "results"), where("uploaded_by", "==", user!.id)));
+      const studentsSnap = await getDocs(collection(db, "students"));
+      const subjectsSnap = await getDocs(collection(db, "subjects"));
+      const termsSnap = await getDocs(collection(db, "terms"));
+      
+      const studentsMap = new Map();
+      const subjectsMap = new Map();
+      const termsMap = new Map();
+      
+      studentsSnap.docs.forEach(doc => studentsMap.set(doc.id, doc.data()));
+      subjectsSnap.docs.forEach(doc => subjectsMap.set(doc.id, doc.data()));
+      termsSnap.docs.forEach(doc => termsMap.set(doc.id, doc.data()));
+      
+      return {
+        results: resultsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+        studentsMap,
+        subjectsMap,
+        termsMap,
+      };
     },
     enabled: !!user,
   });
+
+  const results = allData?.results || [];
+  const studentsMap = allData?.studentsMap || new Map();
+  const subjectsMap = allData?.subjectsMap || new Map();
+  const termsMap = allData?.termsMap || new Map();
 
   return (
     <div>
@@ -184,14 +204,19 @@ const MyResults = () => {
             </tr>
           </thead>
           <tbody>
-            {results?.map((r) => (
-              <tr key={r.id} className="border-t border-border">
-                <td className="p-3 text-foreground">{(r as any).students?.full_name}</td>
-                <td className="p-3 text-muted-foreground">{(r as any).subjects?.name}</td>
-                <td className="p-3"><span className={`px-2 py-1 rounded-md text-xs font-bold ${r.grade === "A" ? "bg-secondary/10 text-secondary" : r.grade === "F" ? "bg-destructive/10 text-destructive" : "bg-accent/20 text-accent-foreground"}`}>{r.grade}</span></td>
-                <td className="p-3 text-muted-foreground">{(r as any).terms?.name}</td>
-              </tr>
-            ))}
+            {results?.map((r: any) => {
+              const student = studentsMap.get(r.student_id);
+              const subject = subjectsMap.get(r.subject_id);
+              const term = termsMap.get(r.term_id);
+              return (
+                <tr key={r.id} className="border-t border-border">
+                  <td className="p-3 text-foreground">{student?.full_name || "—"}</td>
+                  <td className="p-3 text-muted-foreground">{subject?.name || "—"}</td>
+                  <td className="p-3"><span className={`px-2 py-1 rounded-md text-xs font-bold ${r.grade === "A" ? "bg-secondary/10 text-secondary" : r.grade === "F" ? "bg-destructive/10 text-destructive" : "bg-accent/20 text-accent-foreground"}`}>{r.grade}</span></td>
+                  <td className="p-3 text-muted-foreground">{term?.name || "—"}</td>
+                </tr>
+              );
+            })}
             {(!results || results.length === 0) && <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">No results uploaded yet.</td></tr>}
           </tbody>
         </table>
