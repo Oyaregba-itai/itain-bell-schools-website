@@ -6,8 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { db } from "@/integrations/firebase/config";
-import { collection, addDoc } from "firebase/firestore";
+import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, GraduationCap, BookOpen, Shield, UserPlus } from "lucide-react";
 import schoolLogo from "@/assets/school-logo.png";
 
@@ -57,14 +56,18 @@ const LoginPage = () => {
     }
     setRegLoading(true);
     try {
-      await addDoc(collection(db, "registration_requests"), {
-        full_name: regForm.full_name,
-        email: regForm.email,
-        phone: regForm.phone || null,
-        role: regForm.role as PortalRole,
-        created_at: new Date(),
-        approved: false,
-      });
+      const { error } = await supabase.from("registration_requests").insert([
+        {
+          full_name: regForm.full_name,
+          email: regForm.email,
+          phone: regForm.phone || null,
+          role: regForm.role as PortalRole,
+          approved: false,
+        },
+      ]);
+      
+      if (error) throw error;
+      
       toast({ title: "Request submitted!", description: "The administrator will review your request and create your account." });
       setRegForm({ full_name: "", email: "", phone: "", role: "" });
       setMode("select");

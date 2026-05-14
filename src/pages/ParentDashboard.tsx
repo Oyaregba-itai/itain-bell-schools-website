@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { db } from "@/integrations/firebase/config";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardLayout from "@/components/DashboardLayout";
 import { GraduationCap } from "lucide-react";
@@ -27,14 +26,34 @@ const ParentOverview = () => {
   const { data: allData } = useQuery({
     queryKey: ["my-children", user?.id],
     queryFn: async () => {
-      const childrenSnap = await getDocs(query(collection(db, "students"), where("parent_id", "==", user!.id)));
-      const classesSnap = await getDocs(collection(db, "classes"));
-      
+      if (!user?.id) return { children: [], classesMap: new Map() };
+
+      // Get students linked to this parent
+      const { data: childrenData, error: childrenError } = await supabase
+        .from("parent_students")
+        .select(
+          `
+          student_id,
+          students:student_id(id, first_name, last_name, student_id, class_id),
+          classes:students(class_id)
+        `
+        )
+        .eq("parent_id", user.id);
+
+      if (childrenError) throw childrenError;
+
+      // Get all classes
+      const { data: classesData, error: classesError } = await supabase
+        .from("classes")
+        .select("*");
+
+      if (classesError) throw classesError;
+
       const classesMap = new Map();
-      classesSnap.docs.forEach(doc => classesMap.set(doc.id, doc.data()));
-      
+      classesData?.forEach((cls) => classesMap.set(cls.id, cls));
+
       return {
-        children: childrenSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+        children: childrenData?.map((rel) => rel.students) || [],
         classesMap,
       };
     },
@@ -49,21 +68,25 @@ const ParentOverview = () => {
       <h3 className="text-lg font-heading text-foreground mb-6">My Children</h3>
       <div className="grid gap-4 md:grid-cols-2">
         {children?.map((child: any) => {
-          const className = classesMap.get(child.class_id)?.name;
+          const className = classesMap.get(child?.class_id)?.name;
           return (
-            <div key={child.id} className="bg-card rounded-xl p-5 shadow-card flex items-center gap-4">
+            <div key={child?.id} className="bg-card rounded-xl p-5 shadow-card flex items-center gap-4">
               <div className="w-12 h-12 rounded-full green-gradient flex items-center justify-center">
                 <GraduationCap className="text-primary-foreground" size={22} />
               </div>
               <div>
-                <div className="font-medium text-foreground">{child.full_name}</div>
+                <div className="font-medium text-foreground">
+                  {child?.first_name} {child?.last_name}
+                </div>
                 <div className="text-sm text-muted-foreground">{className || "No class assigned"}</div>
               </div>
             </div>
           );
         })}
         {(!children || children.length === 0) && (
-          <p className="text-muted-foreground text-sm">No children linked to your account yet. Contact the administrator.</p>
+          <p className="text-muted-foreground text-sm">
+            No children linked to your account yet. Contact the administrator.
+          </p>
         )}
       </div>
     </div>
@@ -76,37 +99,52 @@ const ChildrenResults = () => {
   const { data: children } = useQuery({
     queryKey: ["my-children", user?.id],
     queryFn: async () => {
-      const querySnapshot = await getDocs(query(collection(db, "students"), where("parent_id", "==", user!.id)));
-      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (!user?.id) return [];
+
+      const { data, error } = await supabase
+        .from("parent_students")
+        .select("student_id, students:student_id(id)")
+        .eq("parent_id", user.id);
+
+      if (error) throw error;
+      return data?.map((rel) => rel.students) || [];
     },
     enabled: !!user,
   });
 
-  const childIds = children?.map((c: any) => c.id) || [];
+  const childIds = children?.map((c: any) => c?.id).filter(Boolean) || [];
 
   const { data: allData } = useQuery({
     queryKey: ["children-results", childIds],
     queryFn: async () => {
-      if (!childIds.length) return { results: [], studentsMap: new Map(), subjectsMap: new Map(), termsMap: new Map() };
-      
-      const resultsSnap = await getDocs(collection(db, "results"));
-      const studentsSnap = await getDocs(collection(db, "students"));
-      const subjectsSnap = await getDocs(collection(db, "subjects"));
-      const termsSnap = await getDocs(collection(db, "terms"));
-      
+      if (!childIds.length)
+        return { results: [], studentsMap: new Map(), subjectsMap: new Map(), termsMap: new Map() };
+
+      const { data: resultsData, error: resultsError } = await supabase
+        .from("results")
+        .select(
+          `
+          *,
+          subjects:subject_id(id, name),
+          students:student_id(id, first_name, last_name),
+          terms:term_id(id, name)
+        `
+        )
+        .in("student_id", childIds);
+
+      if (resultsError) throw resultsError;
+
       const studentsMap = new Map();
       const subjectsMap = new Map();
       const termsMap = new Map();
-      
-      studentsSnap.docs.forEach(doc => studentsMap.set(doc.id, doc.data()));
-      subjectsSnap.docs.forEach(doc => subjectsMap.set(doc.id, doc.data()));
-      termsSnap.docs.forEach(doc => termsMap.set(doc.id, doc.data()));
-      
-      const results = resultsSnap.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter((r: any) => childIds.includes(r.student_id));
-      
-      return { results, studentsMap, subjectsMap, termsMap };
+
+      resultsData?.forEach((result: any) => {
+        if (result.students) studentsMap.set(result.student_id, result.students);
+        if (result.subjects) subjectsMap.set(result.subject_id, result.subjects);
+        if (result.terms) termsMap.set(result.term_id, result.terms);
+      });
+
+      return { results: resultsData || [], studentsMap, subjectsMap, termsMap };
     },
     enabled: childIds.length > 0,
   });
@@ -125,6 +163,7 @@ const ChildrenResults = () => {
             <tr>
               <th className="text-left p-3 font-medium text-muted-foreground">Child</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Subject</th>
+              <th className="text-left p-3 font-medium text-muted-foreground">Total Score</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Grade</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Term</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Comment</th>
@@ -137,22 +176,35 @@ const ChildrenResults = () => {
               const term = termsMap.get(r.term_id);
               return (
                 <tr key={r.id} className="border-t border-border">
-                  <td className="p-3 text-foreground">{student?.full_name || "—"}</td>
-                  <td className="p-3 text-muted-foreground">{subject?.name || "—"}</td>
-                  <td className="p-3">
-                    <span className={`px-2 py-1 rounded-md text-xs font-bold ${
-                      r.grade === "A" ? "bg-secondary/10 text-secondary" :
-                      r.grade === "F" ? "bg-destructive/10 text-destructive" :
-                      "bg-accent/20 text-accent-foreground"
-                    }`}>{r.grade}</span>
+                  <td className="p-3 text-foreground">
+                    {student?.first_name} {student?.last_name}
                   </td>
-                  <td className="p-3 text-muted-foreground">{term?.name} — {term?.academic_year}</td>
-                  <td className="p-3 text-muted-foreground">{r.comment || "—"}</td>
+                  <td className="p-3 text-muted-foreground">{subject?.name || "—"}</td>
+                  <td className="p-3 text-foreground font-semibold">{r.total_score || "—"}</td>
+                  <td className="p-3">
+                    <span
+                      className={`px-2 py-1 rounded-md text-xs font-bold ${
+                        r.grade_letter === "A"
+                          ? "bg-secondary/10 text-secondary"
+                          : r.grade_letter === "F"
+                            ? "bg-destructive/10 text-destructive"
+                            : "bg-accent/20 text-accent-foreground"
+                      }`}
+                    >
+                      {r.grade_letter || "—"}
+                    </span>
+                  </td>
+                  <td className="p-3 text-muted-foreground">{term?.name || "—"}</td>
+                  <td className="p-3 text-muted-foreground">{r.teacher_comments || "—"}</td>
                 </tr>
               );
             })}
             {(!results || results.length === 0) && (
-              <tr><td colSpan={5} className="p-6 text-center text-muted-foreground">No results available yet.</td></tr>
+              <tr>
+                <td colSpan={6} className="p-6 text-center text-muted-foreground">
+                  No results available yet.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

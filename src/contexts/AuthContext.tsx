@@ -1,11 +1,11 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { User, signInWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged } from "firebase/auth";
-import { auth, db } from "@/integrations/firebase/config";
-import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { User as SupabaseUser } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
 
-export type AppRole = "admin" | "teacher" | "parent";
+export type AppRole = "admin" | "teacher" | "parent" | "creche_staff";
 
 interface Profile {
+  id?: string;
   full_name: string;
   email: string;
   role: AppRole;
@@ -14,7 +14,7 @@ interface Profile {
 }
 
 interface AuthContextType {
-  user: User | null;
+  user: SupabaseUser | null;
   role: AppRole | null;
   profile: Profile | null;
   loading: boolean;
@@ -25,31 +25,31 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<SupabaseUser | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchUserData = async (userId: string) => {
     try {
-      // Get user profile from Firestore
-      const profileRef = doc(db, "profiles", userId);
-      const profileSnap = await getDoc(profileRef);
-      
-      if (profileSnap.exists()) {
-        const profileData = profileSnap.data() as Profile;
-        setProfile(profileData);
-        setRole(profileData.role);
-      } else {
-        // If profile doesn't exist, check user_roles collection
-        const rolesRef = collection(db, "user_roles");
-        const rolesQuery = query(rolesRef, where("user_id", "==", userId));
-        const rolesSnap = await getDocs(rolesQuery);
-        
-        if (!rolesSnap.empty) {
-          const roleData = rolesSnap.docs[0].data();
-          setRole(roleData.role);
-        }
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setProfile({
+          id: data.id,
+          full_name: data.full_name,
+          email: data.email,
+          role: data.role as AppRole,
+          phone: data.phone,
+          created_at: data.created_at,
+        });
+        setRole(data.role as AppRole);
       }
     } catch (error) {
       console.error("Error fetching user data:", error);
@@ -57,23 +57,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        await fetchUserData(currentUser.uid);
-      } else {
-        setRole(null);
-        setProfile(null);
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setUser(session?.user || null);
+        if (session?.user) {
+          await fetchUserData(session.user.id);
+        } else {
+          setRole(null);
+          setProfile(null);
+        }
+        setLoading(false);
       }
-      setLoading(false);
-    });
+    );
 
-    return () => unsubscribe();
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) return { error };
+
       return { error: null };
     } catch (error) {
       return { error: error as Error };
@@ -82,7 +92,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     try {
-      await firebaseSignOut(auth);
+      await supabase.auth.signOut();
       setUser(null);
       setRole(null);
       setProfile(null);

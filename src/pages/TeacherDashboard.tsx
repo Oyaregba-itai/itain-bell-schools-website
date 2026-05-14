@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { db } from "@/integrations/firebase/config";
-import { collection, getDocs, addDoc, query, where, Timestamp } from "firebase/firestore";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { GraduationCap, BookOpen } from "lucide-react";
@@ -33,15 +33,28 @@ const TeacherOverview = () => {
   const { data: stats } = useQuery({
     queryKey: ["teacher-stats", user?.id],
     queryFn: async () => {
-      const subjectsSnap = await getDocs(query(collection(db, "subjects"), where("teacher_id", "==", user!.id)));
-      const resultsSnap = await getDocs(query(collection(db, "results"), where("uploaded_by", "==", user!.id)));
-      return { subjects: subjectsSnap.size, results: resultsSnap.size };
+      if (!user?.id) return { subjects: 0, results: 0, testScores: 0 };
+
+      const [subjectsRes, resultsRes, testScoresRes] = await Promise.all([
+        supabase.from("subjects").select("id", { count: "exact" }).eq("teacher_id", user.id),
+        supabase.from("results").select("id", { count: "exact" }).eq("uploaded_by", user.id),
+        supabase.from("test_scores").select("id", { count: "exact" }).in(
+          "test_id",
+          (await supabase.from("tests").select("id").eq("teacher_id", user.id)).data?.map((t) => t.id) || []
+        ),
+      ]);
+
+      return {
+        subjects: subjectsRes.count || 0,
+        results: resultsRes.count || 0,
+        testScores: testScoresRes.count || 0,
+      };
     },
     enabled: !!user,
   });
 
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-3 gap-4">
       <div className="bg-card rounded-xl p-5 shadow-card">
         <BookOpen className="text-primary mb-2" size={24} />
         <div className="text-2xl font-heading text-foreground">{stats?.subjects || 0}</div>
@@ -52,6 +65,11 @@ const TeacherOverview = () => {
         <div className="text-2xl font-heading text-foreground">{stats?.results || 0}</div>
         <div className="text-sm text-muted-foreground">Results Uploaded</div>
       </div>
+      <div className="bg-card rounded-xl p-5 shadow-card">
+        <GraduationCap className="text-primary mb-2" size={24} />
+        <div className="text-2xl font-heading text-foreground">{stats?.testScores || 0}</div>
+        <div className="text-sm text-muted-foreground">Test Scores Entered</div>
+      </div>
     </div>
   );
 };
@@ -60,22 +78,37 @@ const UploadResults = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({ student_id: "", subject_id: "", term_id: "", grade: "", comment: "" });
+  const [form, setForm] = useState({
+    student_id: "",
+    subject_id: "",
+    term_id: "",
+    assignment_score: "",
+    test_score: "",
+    exam_score: "",
+    continuous_assessment: "",
+    teacher_comments: "",
+  });
 
   const { data: subjects } = useQuery({
     queryKey: ["my-subjects", user?.id],
     queryFn: async () => {
-      const querySnapshot = await getDocs(query(collection(db, "subjects"), where("teacher_id", "==", user!.id)));
-      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("subjects")
+        .select("*")
+        .eq("teacher_id", user.id);
+      if (error) throw error;
+      return data || [];
     },
     enabled: !!user,
   });
 
   const { data: terms } = useQuery({
     queryKey: ["terms"],
-    queryFn: async () => { 
-      const querySnapshot = await getDocs(collection(db, "terms"));
-      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    queryFn: async () => {
+      const { data, error } = await supabase.from("terms").select("*");
+      if (error) throw error;
+      return data || [];
     },
   });
 
@@ -84,71 +117,174 @@ const UploadResults = () => {
   const { data: students } = useQuery({
     queryKey: ["class-students", selectedSubject?.class_id],
     queryFn: async () => {
-      const querySnapshot = await getDocs(query(collection(db, "students"), where("class_id", "==", selectedSubject!.class_id)));
-      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (!selectedSubject?.class_id) return [];
+      const { data, error } = await supabase
+        .from("students")
+        .select("*")
+        .eq("class_id", selectedSubject.class_id);
+      if (error) throw error;
+      return data || [];
     },
     enabled: !!selectedSubject?.class_id,
   });
 
   const upload = useMutation({
     mutationFn: async () => {
-      await addDoc(collection(db, "results"), {
-        student_id: form.student_id,
-        subject_id: form.subject_id,
-        term_id: form.term_id,
-        grade: form.grade,
-        comment: form.comment || null,
-        uploaded_by: user!.id,
-        created_at: Timestamp.now(),
-      });
+      const totalScore =
+        (parseFloat(form.assignment_score) || 0) +
+        (parseFloat(form.test_score) || 0) +
+        (parseFloat(form.exam_score) || 0) +
+        (parseFloat(form.continuous_assessment) || 0);
+
+      const { error } = await supabase.from("results").insert([
+        {
+          student_id: form.student_id,
+          subject_id: form.subject_id,
+          term_id: form.term_id,
+          assignment_score: form.assignment_score || null,
+          test_score: form.test_score || null,
+          exam_score: form.exam_score || null,
+          continuous_assessment: form.continuous_assessment || null,
+          total_score: totalScore,
+          teacher_comments: form.teacher_comments || null,
+          uploaded_by: user!.id,
+        },
+      ]);
+      if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Result uploaded successfully" });
       queryClient.invalidateQueries({ queryKey: ["my-results"] });
-      setForm({ student_id: "", subject_id: form.subject_id, term_id: form.term_id, grade: "", comment: "" });
+      setForm({
+        student_id: "",
+        subject_id: form.subject_id,
+        term_id: form.term_id,
+        assignment_score: "",
+        test_score: "",
+        exam_score: "",
+        continuous_assessment: "",
+        teacher_comments: "",
+      });
     },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error) =>
+      toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   return (
-    <div className="max-w-lg">
+    <div className="max-w-2xl">
       <h3 className="text-lg font-heading text-foreground mb-6">Upload Result</h3>
-      <form onSubmit={(e) => { e.preventDefault(); upload.mutate(); }} className="bg-card rounded-xl p-6 shadow-card space-y-4">
-        <div>
-          <Label>Subject</Label>
-          <Select value={form.subject_id} onValueChange={(v) => setForm({ ...form, subject_id: v, student_id: "" })}>
-            <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
-            <SelectContent>{subjects?.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-          </Select>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          upload.mutate();
+        }}
+        className="bg-card rounded-xl p-6 shadow-card space-y-4"
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label>Subject *</Label>
+            <Select
+              value={form.subject_id}
+              onValueChange={(v) => setForm({ ...form, subject_id: v, student_id: "" })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select subject" />
+              </SelectTrigger>
+              <SelectContent>
+                {subjects?.map((s: any) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Term *</Label>
+            <Select value={form.term_id} onValueChange={(v) => setForm({ ...form, term_id: v })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select term" />
+              </SelectTrigger>
+              <SelectContent>
+                {terms?.map((t: any) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
+
         <div>
-          <Label>Student</Label>
+          <Label>Student *</Label>
           <Select value={form.student_id} onValueChange={(v) => setForm({ ...form, student_id: v })}>
-            <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
-            <SelectContent>{students?.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.full_name}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label>Term</Label>
-          <Select value={form.term_id} onValueChange={(v) => setForm({ ...form, term_id: v })}>
-            <SelectTrigger><SelectValue placeholder="Select term" /></SelectTrigger>
-            <SelectContent>{terms?.map(t => <SelectItem key={t.id} value={t.id}>{t.name} — {t.academic_year}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label>Grade</Label>
-          <Select value={form.grade} onValueChange={(v) => setForm({ ...form, grade: v })}>
-            <SelectTrigger><SelectValue placeholder="Select grade" /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue placeholder="Select student" />
+            </SelectTrigger>
             <SelectContent>
-              {["A", "B", "C", "D", "F"].map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+              {students?.map((s: any) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.first_name} {s.last_name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
-        <div>
-          <Label>Comment (optional)</Label>
-          <Input value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} placeholder="e.g. Excellent performance" />
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label>Assignment Score</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={form.assignment_score}
+              onChange={(e) => setForm({ ...form, assignment_score: e.target.value })}
+              placeholder="0.00"
+            />
+          </div>
+          <div>
+            <Label>Test Score</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={form.test_score}
+              onChange={(e) => setForm({ ...form, test_score: e.target.value })}
+              placeholder="0.00"
+            />
+          </div>
+          <div>
+            <Label>Exam Score</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={form.exam_score}
+              onChange={(e) => setForm({ ...form, exam_score: e.target.value })}
+              placeholder="0.00"
+            />
+          </div>
+          <div>
+            <Label>Continuous Assessment</Label>
+            <Input
+              type="number"
+              step="0.01"
+              value={form.continuous_assessment}
+              onChange={(e) => setForm({ ...form, continuous_assessment: e.target.value })}
+              placeholder="0.00"
+            />
+          </div>
         </div>
-        <Button type="submit" className="w-full hero-gradient" disabled={upload.isPending}>
+
+        <div>
+          <Label>Comments (optional)</Label>
+          <Textarea
+            value={form.teacher_comments}
+            onChange={(e) => setForm({ ...form, teacher_comments: e.target.value })}
+            placeholder="e.g. Excellent performance, needs improvement..."
+          />
+        </div>
+
+        <Button type="submit" className="w-full hero-gradient" disabled={upload.isPending || !form.student_id}>
           {upload.isPending ? "Uploading..." : "Upload Result"}
         </Button>
       </form>
@@ -162,21 +298,34 @@ const MyResults = () => {
   const { data: allData } = useQuery({
     queryKey: ["my-results", user?.id],
     queryFn: async () => {
-      const resultsSnap = await getDocs(query(collection(db, "results"), where("uploaded_by", "==", user!.id)));
-      const studentsSnap = await getDocs(collection(db, "students"));
-      const subjectsSnap = await getDocs(collection(db, "subjects"));
-      const termsSnap = await getDocs(collection(db, "terms"));
-      
+      if (!user?.id) return { results: [], studentsMap: new Map(), subjectsMap: new Map(), termsMap: new Map() };
+
+      const { data: resultsData, error: resultsError } = await supabase
+        .from("results")
+        .select(
+          `
+          *,
+          students:student_id(id, first_name, last_name),
+          subjects:subject_id(id, name),
+          terms:term_id(id, name)
+        `
+        )
+        .eq("uploaded_by", user.id);
+
+      if (resultsError) throw resultsError;
+
       const studentsMap = new Map();
       const subjectsMap = new Map();
       const termsMap = new Map();
-      
-      studentsSnap.docs.forEach(doc => studentsMap.set(doc.id, doc.data()));
-      subjectsSnap.docs.forEach(doc => subjectsMap.set(doc.id, doc.data()));
-      termsSnap.docs.forEach(doc => termsMap.set(doc.id, doc.data()));
-      
+
+      resultsData?.forEach((result: any) => {
+        if (result.students) studentsMap.set(result.student_id, result.students);
+        if (result.subjects) subjectsMap.set(result.subject_id, result.subjects);
+        if (result.terms) termsMap.set(result.term_id, result.terms);
+      });
+
       return {
-        results: resultsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+        results: resultsData || [],
         studentsMap,
         subjectsMap,
         termsMap,
@@ -199,6 +348,7 @@ const MyResults = () => {
             <tr>
               <th className="text-left p-3 font-medium text-muted-foreground">Student</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Subject</th>
+              <th className="text-left p-3 font-medium text-muted-foreground">Total Score</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Grade</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Term</th>
             </tr>
@@ -210,14 +360,35 @@ const MyResults = () => {
               const term = termsMap.get(r.term_id);
               return (
                 <tr key={r.id} className="border-t border-border">
-                  <td className="p-3 text-foreground">{student?.full_name || "—"}</td>
+                  <td className="p-3 text-foreground">
+                    {student?.first_name} {student?.last_name}
+                  </td>
                   <td className="p-3 text-muted-foreground">{subject?.name || "—"}</td>
-                  <td className="p-3"><span className={`px-2 py-1 rounded-md text-xs font-bold ${r.grade === "A" ? "bg-secondary/10 text-secondary" : r.grade === "F" ? "bg-destructive/10 text-destructive" : "bg-accent/20 text-accent-foreground"}`}>{r.grade}</span></td>
+                  <td className="p-3 text-foreground font-semibold">{r.total_score || "—"}</td>
+                  <td className="p-3">
+                    <span
+                      className={`px-2 py-1 rounded-md text-xs font-bold ${
+                        r.grade_letter === "A"
+                          ? "bg-secondary/10 text-secondary"
+                          : r.grade_letter === "F"
+                            ? "bg-destructive/10 text-destructive"
+                            : "bg-accent/20 text-accent-foreground"
+                      }`}
+                    >
+                      {r.grade_letter || "—"}
+                    </span>
+                  </td>
                   <td className="p-3 text-muted-foreground">{term?.name || "—"}</td>
                 </tr>
               );
             })}
-            {(!results || results.length === 0) && <tr><td colSpan={4} className="p-6 text-center text-muted-foreground">No results uploaded yet.</td></tr>}
+            {(!results || results.length === 0) && (
+              <tr>
+                <td colSpan={5} className="p-6 text-center text-muted-foreground">
+                  No results uploaded yet.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
