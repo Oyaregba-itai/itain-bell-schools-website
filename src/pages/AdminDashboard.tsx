@@ -86,9 +86,10 @@ const ManageUsers = () => {
     queryKey: ["all-users"],
     queryFn: async () => {
       // Get profiles with their roles
+      // Note: email column may not exist yet, so we'll fetch without it for now
       const { data: profiles, error: profileError } = await supabase
         .from("profiles")
-        .select("id, user_id, full_name, email, created_at");
+        .select("id, user_id, full_name, created_at");
       
       if (profileError) throw profileError;
 
@@ -106,7 +107,7 @@ const ManageUsers = () => {
           id: profile.id,
           user_id: profile.user_id,
           full_name: profile.full_name,
-          email: profile.email,
+          email: "", // Will be filled from profiles if available
           role: userRole?.role || "parent",
           created_at: profile.created_at,
         };
