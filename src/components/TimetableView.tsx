@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { db } from "@/integrations/firebase/config";
-import { collection, query, orderBy, getDocs, addDoc, Timestamp } from "firebase/firestore";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -24,50 +23,55 @@ const TimetableView = () => {
   const { data: classes } = useQuery({
     queryKey: ["classes"],
     queryFn: async () => {
-      const q = query(collection(db, "classes"), orderBy("name"));
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const { data, error } = await supabase
+        .from("classes")
+        .select("*")
+        .order("name");
+      if (error) throw error;
+      return data || [];
     },
   });
 
   const { data: subjects } = useQuery({
     queryKey: ["subjects"],
     queryFn: async () => {
-      const q = query(collection(db, "subjects"));
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const { data, error } = await supabase
+        .from("subjects")
+        .select("*");
+      if (error) throw error;
+      return data || [];
     },
   });
 
   const { data: entries } = useQuery({
     queryKey: ["timetable", selectedClass],
     queryFn: async () => {
-      const q = query(
-        collection(db, "timetable_entries"),
-        orderBy("day_of_week"),
-        orderBy("start_time")
-      );
-      const querySnapshot = await getDocs(q);
-      let docs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let query = supabase
+        .from("timetable_entries")
+        .select("*")
+        .order("day_of_week")
+        .order("start_time");
       
       if (selectedClass && selectedClass !== "all") {
-        docs = docs.filter(d => d.class_id === selectedClass);
+        query = query.eq("class_id", selectedClass);
       }
       
-      return docs;
+      const { data, error } = await query;
+      if (error) throw error;
+      return data || [];
     },
   });
 
   const create = useMutation({
     mutationFn: async () => {
-      await addDoc(collection(db, "timetable_entries"), {
+      const { error } = await supabase.from("timetable_entries").insert({
         class_id: form.class_id,
         subject_id: form.subject_id,
         day_of_week: form.day_of_week,
         start_time: form.start_time,
         end_time: form.end_time,
-        created_at: Timestamp.now(),
       });
+      if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Timetable entry added" });
