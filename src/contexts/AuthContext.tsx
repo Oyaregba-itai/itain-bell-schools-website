@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useEffect, useState, ReactNode } from "react";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -22,7 +22,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -30,27 +30,52 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchUserData = async (userId: string) => {
+  const fetchUserData = async (userId: string, userEmail: string) => {
     try {
-      const { data, error } = await supabase
-        .from("users")
+      // Fetch user profile
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
         .select("*")
-        .eq("id", userId)
+        .eq("user_id", userId)
         .single();
 
-      if (error) throw error;
-
-      if (data) {
-        setProfile({
-          id: data.id,
-          full_name: data.full_name,
-          email: data.email,
-          role: data.role as AppRole,
-          phone: data.phone,
-          created_at: data.created_at,
-        });
-        setRole(data.role as AppRole);
+      if (profileError) {
+        console.error("Profile fetch error:", profileError);
+        // Even if profile fetch fails, don't throw - just skip profile data
       }
+
+      if (!profileData) {
+        console.warn("No profile data found for user:", userId);
+        return;
+      }
+
+      // Fetch user role
+      const { data: roleData, error: roleError } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .single();
+
+      if (roleError) {
+        console.error("Role fetch error:", roleError);
+        return;
+      }
+
+      if (!roleData) {
+        console.warn("No role data found for user:", userId);
+        return;
+      }
+
+      const userRole = roleData.role as AppRole;
+      setProfile({
+        id: profileData.id,
+        full_name: profileData.full_name,
+        email: userEmail,
+        role: userRole,
+        phone: profileData.phone,
+        created_at: profileData.created_at,
+      });
+      setRole(userRole);
     } catch (error) {
       console.error("Error fetching user data:", error);
     }
@@ -58,14 +83,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         setUser(session?.user || null);
-        if (session?.user) {
-          await fetchUserData(session.user.id);
-        } else {
-          setRole(null);
-          setProfile(null);
-        }
         setLoading(false);
       }
     );
@@ -74,6 +93,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       authListener?.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (user && !role) {
+      fetchUserData(user.id, user.email || "");
+    }
+  }, [user]);
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -106,10 +131,4 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth must be used within AuthProvider");
-  return context;
 };
