@@ -85,32 +85,65 @@ const ManageUsers = () => {
   const { data: users } = useQuery({
     queryKey: ["all-users"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data || [];
+      // Get profiles with their roles
+      const { data: profiles, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, user_id, full_name, email, created_at");
+      
+      if (profileError) throw profileError;
+
+      // Get all user roles
+      const { data: roles, error: roleError } = await supabase
+        .from("user_roles")
+        .select("user_id, role");
+      
+      if (roleError) throw roleError;
+
+      // Combine profiles with their roles
+      const usersWithRoles = profiles?.map((profile: any) => {
+        const userRole = roles?.find((r: any) => r.user_id === profile.user_id);
+        return {
+          id: profile.id,
+          user_id: profile.user_id,
+          full_name: profile.full_name,
+          email: profile.email,
+          role: userRole?.role || "parent",
+          created_at: profile.created_at,
+        };
+      }) || [];
+
+      return usersWithRoles.sort((a: any, b: any) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
     },
   });
 
   const createUser = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.auth.signUp({
-        email: newUser.email,
-        password: Math.random().toString(36).slice(-12),
-      });
-
-      if (error) throw error;
-
-      // Create user record
-      await supabase.from("users").insert([
+      // Call the create-user edge function to create auth user
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
         {
-          email: newUser.email,
-          full_name: newUser.full_name,
-          role: newUser.role,
-        },
-      ]);
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            email: newUser.email,
+            password: Math.random().toString(36).slice(-12),
+            full_name: newUser.full_name,
+            role: newUser.role,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create user");
+      }
     },
     onSuccess: () => {
       toast({ title: "User created successfully" });

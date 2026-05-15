@@ -31,6 +31,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   const fetchUserData = async (userId: string, userEmail: string) => {
+    console.log("fetchUserData called for userId:", userId);
     try {
       // Fetch user profile
       const { data: profileData, error: profileError } = await supabase
@@ -39,9 +40,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .eq("user_id", userId)
         .single();
 
-      if (profileError) {
+      console.log("Profile query result:", { profileData, profileError });
+
+      if (profileError && profileError.code !== "PGRST116") {
         console.error("Profile fetch error:", profileError);
-        // Even if profile fetch fails, don't throw - just skip profile data
+        return;
       }
 
       if (!profileData) {
@@ -50,13 +53,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       // Fetch user role
+      console.log("Fetching role for userId:", userId);
       const { data: roleData, error: roleError } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", userId)
         .single();
 
-      if (roleError) {
+      console.log("Role query result:", { roleData, roleError });
+
+      if (roleError && roleError.code !== "PGRST116") {
         console.error("Role fetch error:", roleError);
         return;
       }
@@ -67,6 +73,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const userRole = roleData.role as AppRole;
+      console.log("Setting user role:", userRole);
       setProfile({
         id: profileData.id,
         full_name: profileData.full_name,

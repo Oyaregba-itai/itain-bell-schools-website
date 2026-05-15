@@ -69,12 +69,22 @@ serve(async (req) => {
       });
     }
 
-    // Update profile with phone
-    if (phone) {
-      await supabaseAdmin
-        .from("profiles")
-        .update({ phone })
-        .eq("user_id", newUser.user.id);
+    // Create or update profile with email and full_name
+    const { error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .upsert({
+        user_id: newUser.user.id,
+        full_name,
+        email,
+        phone: phone || null,
+      }, {
+        onConflict: "user_id",
+      });
+
+    if (profileError) {
+      return new Response(JSON.stringify({ error: profileError.message }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Assign role
