@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { db } from "@/integrations/firebase/config";
-import { collection, query, orderBy, getDocs, addDoc, Timestamp } from "firebase/firestore";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,28 +22,25 @@ const AnnouncementsView = () => {
   const { data: announcements } = useQuery({
     queryKey: ["announcements"],
     queryFn: async () => {
-      const q = query(
-        collection(db, "announcements"),
-        orderBy("created_at", "desc")
-      );
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        created_at: doc.data().created_at?.toDate?.() || new Date(),
-      }));
+      const { data, error } = await supabase
+        .from("announcements")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
     },
   });
 
   const create = useMutation({
     mutationFn: async () => {
-      await addDoc(collection(db, "announcements"), {
+      const { error } = await supabase.from("announcements").insert({
         title: form.title,
         content: form.content,
         target_role: form.target_role,
-        created_by: user!.uid,
-        created_at: Timestamp.now(),
+        created_by: user!.id,
+        created_at: new Date().toISOString(),
       });
+      if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Announcement posted" });
