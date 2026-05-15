@@ -11,9 +11,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck } from "lucide-react";
+import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, MessageCircle, UserPlus } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
+import MessagingView from "@/components/MessagingView";
+import GroupMessagingView from "@/components/GroupMessagingView";
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -30,6 +32,8 @@ const AdminDashboard = () => {
       {activeTab === "results" && <ViewAllResults />}
       {activeTab === "announcements" && <AnnouncementsView />}
       {activeTab === "timetable" && <TimetableView />}
+      {activeTab === "messaging" && <MessagingView />}
+      {activeTab === "groups" && <GroupMessagingView />}
     </DashboardLayout>
   );
 };

@@ -1,7 +1,7 @@
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, Users, BookOpen, GraduationCap, BarChart3, Calendar, Megaphone, Clock, Menu, ArrowLeft } from "lucide-react";
+import { LogOut, Users, BookOpen, GraduationCap, BarChart3, Calendar, Megaphone, Clock, Menu, ArrowLeft, MessageCircle, UserPlus } from "lucide-react";
 import { ReactNode, useState } from "react";
 import schoolLogo from "@/assets/school-logo.png";
 
@@ -27,6 +27,8 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
     { id: "results", label: "All Results", icon: BarChart3 },
     { id: "announcements", label: "Announcements", icon: Megaphone },
     { id: "timetable", label: "Timetable", icon: Clock },
+    { id: "messaging", label: "Messages", icon: MessageCircle },
+    { id: "groups", label: "Group Messaging", icon: UserPlus },
   ];
 
   const teacherTabs = [
@@ -35,6 +37,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
     { id: "my-results", label: "My Results", icon: BarChart3 },
     { id: "timetable", label: "Timetable", icon: Clock },
     { id: "announcements", label: "Announcements", icon: Megaphone },
+    { id: "messaging", label: "Messages", icon: MessageCircle },
   ];
 
   const parentTabs = [
@@ -42,6 +45,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
     { id: "results", label: "My Children's Results", icon: GraduationCap },
     { id: "timetable", label: "Timetable", icon: Clock },
     { id: "announcements", label: "Announcements", icon: Megaphone },
+    { id: "messaging", label: "Messages", icon: MessageCircle },
   ];
 
   const tabs = role === "admin" ? adminTabs : role === "teacher" ? teacherTabs : parentTabs;
