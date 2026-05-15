@@ -17,7 +17,7 @@ const TimetableView = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [selectedClass, setSelectedClass] = useState<string>("");
+  const [selectedClass, setSelectedClass] = useState<string>("all");
   const [form, setForm] = useState({ class_id: "", subject_id: "", day_of_week: "", start_time: "", end_time: "" });
 
   const { data: classes } = useQuery({
@@ -92,7 +92,7 @@ const TimetableView = () => {
           <Select value={selectedClass} onValueChange={setSelectedClass}>
             <SelectTrigger className="w-48"><SelectValue placeholder="All classes" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Classes</SelectItem>
+              <SelectItem value="all">All Classes</SelectItem>
               {classes?.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
             </SelectContent>
           </Select>
