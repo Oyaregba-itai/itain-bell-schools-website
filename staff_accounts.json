@@ -1,0 +1,170 @@
+[
+  {
+    "staff_id": "STF001",
+    "name": "Miss Elizabeth",
+    "email": "elizabeth.staff@itainbell.school",
+    "password": "e\"I#[beX-NnI",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF002",
+    "name": "Miss Elizabeth Adigwe",
+    "email": "elizabeth.adigwe@itainbell.school",
+    "password": "~-Ks2x9Cnkm{",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF003",
+    "name": "Miss Kehinde Ademoyegun",
+    "email": "kehinde.ademoyegun@itainbell.school",
+    "password": "nK@nNOT%\"h*Q",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF004",
+    "name": "Miss Mary Edet",
+    "email": "mary.edet@itainbell.school",
+    "password": ":%#Bw.0d_RfD",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF005",
+    "name": "Miss Mercy Uche",
+    "email": "mercy.uche@itainbell.school",
+    "password": "v,9*X*[k8U'^",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF006",
+    "name": "Miss Ogiji Glory",
+    "email": "ogiji.glory@itainbell.school",
+    "password": "Bx`1O_u<-S4^",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF007",
+    "name": "Miss Omowunmi Azeez",
+    "email": "omowunmi.azeez@itainbell.school",
+    "password": "Z#0*Hog#B?\\I",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF008",
+    "name": "Miss Vhrmdah Ayuba",
+    "email": "vhrmdah.ayuba@itainbell.school",
+    "password": "XquS8b`gH=~z",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF009",
+    "name": "Mr Godiya Yakubu",
+    "email": "godiya.yakubu@itainbell.school",
+    "password": ">7T^-ejy?tfC",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF010",
+    "name": "Mr James Hakuri",
+    "email": "james.hakuri@itainbell.school",
+    "password": "L3SB\\4/CTb5E",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF011",
+    "name": "Mr Nicolas",
+    "email": "nicolas.staff@itainbell.school",
+    "password": "hxA82aV,w+/_",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF012",
+    "name": "Mr Oyebode",
+    "email": "oyebode.staff@itainbell.school",
+    "password": "mD#ZUL70U?IK",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF013",
+    "name": "Mr Segun Adedunye",
+    "email": "segun.adedunye@itainbell.school",
+    "password": "\\c{k<#!klEQ#",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF014",
+    "name": "Mrs Adesola Ojekunle",
+    "email": "adesola.ojekunle@itainbell.school",
+    "password": "[(*h-z;jK\"T\\",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF015",
+    "name": "Mrs Balogun Wuraola",
+    "email": "balogun.wuraola@itainbell.school",
+    "password": "nxjAb+`]@cb;",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF016",
+    "name": "Mrs Blessing Ayodele",
+    "email": "blessing.ayodele@itainbell.school",
+    "password": "ZV,H(bO2n,M8",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF017",
+    "name": "Mrs Egele  Olubunmi",
+    "email": "egele.olubunmi@itainbell.school",
+    "password": "5iGV>-L8za@]",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF018",
+    "name": "Mrs Evelyn Odogwu",
+    "email": "evelyn.odogwu@itainbell.school",
+    "password": "KB\"*PR0:&Jdp",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF019",
+    "name": "Mrs Goodness Duru",
+    "email": "goodness.duru@itainbell.school",
+    "password": "5H/KmgRS~\\#H",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF020",
+    "name": "Mrs Kushoro Adedayo",
+    "email": "kushoro.adedayo@itainbell.school",
+    "password": "E{9xbZV+/I/Z",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF021",
+    "name": "Mrs Nse Nwajea",
+    "email": "nse.nwajea@itainbell.school",
+    "password": "\\GMbb=1)dO)z",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF022",
+    "name": "Mrs Oloje Ronke",
+    "email": "oloje.ronke@itainbell.school",
+    "password": "!toJ\\XWjdH@I",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF023",
+    "name": "Mrs Peace Judy Wenegieme",
+    "email": "peace.wenegieme@itainbell.school",
+    "password": "_}q:/mp7^{fD",
+    "role": "teacher"
+  },
+  {
+    "staff_id": "STF024",
+    "name": "Mrs Yetunde Bakare",
+    "email": "yetunde.bakare@itainbell.school",
+    "password": "Hdt,qX[H{w+^",
+    "role": "teacher"
+  }
+]
