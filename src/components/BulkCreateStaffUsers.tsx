@@ -70,32 +70,53 @@ export function BulkCreateStaffUsers() {
     let successful = 0;
     let failed = 0;
 
+    // Get current session to get auth token
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      toast({
+        title: "Error",
+        description: "Not authenticated",
+        variant: "destructive",
+      });
+      setLoading(false);
+      return;
+    }
+
     for (const account of staffAccounts) {
       try {
-        // Create auth user
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-          email: account.email,
-          password: account.password,
-          email_confirm: true,
-        });
-
-        if (authError) throw authError;
-
-        if (authData.user) {
-          // Create user profile
-          const { error: profileError } = await supabase.from("users").insert([
-            {
-              id: authData.user.id,
-              email: account.email,
-              full_name: account.name,
-              role: account.role || "teacher",
-              staff_id: account.staff_id,
+        // Call create-user edge function
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
             },
-          ]);
+            body: JSON.stringify({
+              email: account.email,
+              password: account.password,
+              full_name: account.name,
+              phone: null,
+              role: account.role || "teacher",
+            }),
+          }
+        );
 
-          if (profileError) throw profileError;
-          successful++;
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to create user");
         }
+
+        // Also insert profile data with staff_id
+        await supabase.from("profiles").upsert({
+          user_id: (await response.json()).user.id,
+          email: account.email,
+          full_name: account.name,
+          staff_id: account.staff_id,
+        }, { onConflict: "user_id" });
+
+        successful++;
       } catch (error: any) {
         console.error(`Failed to create user for ${account.email}:`, error);
         failed++;
