@@ -61,7 +61,7 @@ export default function AdminSetup() {
           {
             id: data.user.id,
             email,
-            full_name: "School Administrator",
+            full_name: "Mrs Itai Joy Onize",
             role: "admin",
           },
         ]);
