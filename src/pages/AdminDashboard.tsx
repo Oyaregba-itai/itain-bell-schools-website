@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import DashboardLayout from "@/components/DashboardLayout";
+import { BulkCreateStaffUsers } from "@/components/BulkCreateStaffUsers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -124,13 +125,15 @@ const ManageUsers = () => {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h3 className="text-lg font-heading text-foreground">Manage Users</h3>
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button className="hero-gradient">
-              <Plus size={18} className="mr-2" />
-              Add User
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <BulkCreateStaffUsers />
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button className="hero-gradient">
+                <Plus size={18} className="mr-2" />
+                Add User
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add New User</DialogTitle>
@@ -176,7 +179,8 @@ const ManageUsers = () => {
               </Button>
             </div>
           </DialogContent>
-        </Dialog>
+            </Dialog>
+        </div>
       </div>
 
       <div className="bg-card rounded-xl shadow-card overflow-x-auto">

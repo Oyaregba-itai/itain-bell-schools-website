@@ -9,6 +9,7 @@ import LoginPage from "./pages/LoginPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import TeacherDashboard from "./pages/TeacherDashboard";
 import ParentDashboard from "./pages/ParentDashboard";
+import AdminSetup from "./pages/AdminSetup";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/admin-setup" element={<AdminSetup />} />
             <Route path="/dashboard" element={<ProtectedRoute><DashboardRouter /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
