@@ -44,11 +44,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (profileError && profileError.code !== "PGRST116") {
         console.error("Profile fetch error:", profileError);
+        setLoading(false);
         return;
       }
 
       if (!profileData) {
         console.warn("No profile data found for user:", userId);
+        setLoading(false);
         return;
       }
 
@@ -64,11 +66,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (roleError && roleError.code !== "PGRST116") {
         console.error("Role fetch error:", roleError);
+        setLoading(false);
         return;
       }
 
       if (!roleData) {
         console.warn("No role data found for user:", userId);
+        setLoading(false);
         return;
       }
 
@@ -83,8 +87,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         created_at: profileData.created_at,
       });
       setRole(userRole);
+      setLoading(false);
     } catch (error) {
       console.error("Error fetching user data:", error);
+      setLoading(false);
     }
   };
 
@@ -92,7 +98,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setUser(session?.user || null);
-        setLoading(false);
+        if (!session?.user) {
+          setLoading(false);
+        }
       }
     );
 
