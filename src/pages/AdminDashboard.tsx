@@ -361,11 +361,8 @@ const ManageStudents = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newStudent, setNewStudent] = useState({
-    first_name: "",
-    last_name: "",
-    student_id: "",
-    class_id: "",
-    date_of_birth: "",
+    full_name: "",
+    class_name: "",
   });
 
   const { data: students } = useQuery({
@@ -373,34 +370,22 @@ const ManageStudents = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("students")
-        .select("*, classes:class_id(name)")
-        .order("first_name", { ascending: true });
+        .select("*")
+        .order("full_name", { ascending: true });
       if (error) throw error;
       return data || [];
     },
   });
 
-  const { data: classes } = useQuery({
-    queryKey: ["classes-for-select"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("classes")
-        .select("*")
-        .order("name", { ascending: true });
-      if (error) throw error;
-      return data || [];
-    },
-  });
+  // Get unique class names from students
+  const classNames = Array.from(new Set(students?.map((s: any) => s.class_name) || [])).sort();
 
   const addStudent = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("students").insert([
         {
-          first_name: newStudent.first_name,
-          last_name: newStudent.last_name,
-          student_id: newStudent.student_id,
-          class_id: newStudent.class_id,
-          date_of_birth: newStudent.date_of_birth || null,
+          full_name: newStudent.full_name,
+          class_name: newStudent.class_name,
         },
       ]);
       if (error) throw error;
@@ -408,7 +393,7 @@ const ManageStudents = () => {
     onSuccess: () => {
       toast({ title: "Student added successfully" });
       queryClient.invalidateQueries({ queryKey: ["all-students"] });
-      setNewStudent({ first_name: "", last_name: "", student_id: "", class_id: "", date_of_birth: "" });
+      setNewStudent({ full_name: "", class_name: "" });
     },
     onError: (err: Error) =>
       toast({ title: "Error", description: err.message, variant: "destructive" }),
@@ -430,57 +415,33 @@ const ManageStudents = () => {
               <DialogTitle>Add New Student</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>First Name</Label>
-                  <Input
-                    value={newStudent.first_name}
-                    onChange={(e) => setNewStudent({ ...newStudent, first_name: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <Label>Last Name</Label>
-                  <Input
-                    value={newStudent.last_name}
-                    onChange={(e) => setNewStudent({ ...newStudent, last_name: e.target.value })}
-                  />
-                </div>
-              </div>
               <div>
-                <Label>Student ID</Label>
+                <Label>Full Name</Label>
                 <Input
-                  value={newStudent.student_id}
-                  onChange={(e) => setNewStudent({ ...newStudent, student_id: e.target.value })}
-                  placeholder="e.g. STU001"
+                  value={newStudent.full_name}
+                  onChange={(e) => setNewStudent({ ...newStudent, full_name: e.target.value })}
+                  placeholder="e.g. John Doe"
                 />
               </div>
               <div>
                 <Label>Class</Label>
-                <Select value={newStudent.class_id} onValueChange={(v) => setNewStudent({ ...newStudent, class_id: v })}>
+                <Select value={newStudent.class_name} onValueChange={(v) => setNewStudent({ ...newStudent, class_name: v })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select class" />
                   </SelectTrigger>
                   <SelectContent>
-                    {classes?.map((cls: any) => (
-                      <SelectItem key={cls.id} value={cls.id}>
-                        {cls.name}
+                    {classNames.map((className: string) => (
+                      <SelectItem key={className} value={className}>
+                        {className}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label>Date of Birth (optional)</Label>
-                <Input
-                  type="date"
-                  value={newStudent.date_of_birth}
-                  onChange={(e) => setNewStudent({ ...newStudent, date_of_birth: e.target.value })}
-                />
-              </div>
               <Button
                 onClick={() => addStudent.mutate()}
                 className="w-full hero-gradient"
-                disabled={addStudent.isPending || !newStudent.first_name || !newStudent.last_name}
+                disabled={addStudent.isPending || !newStudent.full_name || !newStudent.class_name}
               >
                 {addStudent.isPending ? "Adding..." : "Add Student"}
               </Button>
@@ -502,14 +463,10 @@ const ManageStudents = () => {
           <tbody>
             {students?.map((student: any) => (
               <tr key={student.id} className="border-t border-border">
-                <td className="p-3 text-foreground">
-                  {student.first_name} {student.last_name}
-                </td>
-                <td className="p-3 text-muted-foreground">{student.student_id}</td>
-                <td className="p-3 text-muted-foreground">{student.classes?.name || "—"}</td>
-                <td className="p-3 text-muted-foreground">
-                  {student.date_of_birth ? new Date(student.date_of_birth).toLocaleDateString() : "—"}
-                </td>
+                <td className="p-3 text-foreground">{student.full_name}</td>
+                <td className="p-3 text-muted-foreground">—</td>
+                <td className="p-3 text-muted-foreground">{student.class_name}</td>
+                <td className="p-3 text-muted-foreground">—</td>
               </tr>
             ))}
           </tbody>
