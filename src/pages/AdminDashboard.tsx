@@ -256,7 +256,7 @@ const ManageUsers = () => {
 const ManageClasses = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [newClass, setNewClass] = useState({ name: "", level: "" });
+  const [newClass, setNewClass] = useState({ name: "", description: "" });
 
   const { data: classes } = useQuery({
     queryKey: ["all-classes"],
@@ -274,13 +274,13 @@ const ManageClasses = () => {
     mutationFn: async () => {
       const { error } = await supabase
         .from("classes")
-        .insert([{ name: newClass.name, level: parseInt(newClass.level) || null }]);
+        .insert([{ name: newClass.name, description: newClass.description || null }]);
       if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Class created successfully" });
       queryClient.invalidateQueries({ queryKey: ["all-classes"] });
-      setNewClass({ name: "", level: "" });
+      setNewClass({ name: "", description: "" });
     },
     onError: (err: Error) =>
       toast({ title: "Error", description: err.message, variant: "destructive" }),
@@ -311,12 +311,11 @@ const ManageClasses = () => {
                 />
               </div>
               <div>
-                <Label>Level (optional)</Label>
-                <Input
-                  type="number"
-                  value={newClass.level}
-                  onChange={(e) => setNewClass({ ...newClass, level: e.target.value })}
-                  placeholder="e.g. 1"
+                <Label>Description (optional)</Label>
+                <Textarea
+                  value={newClass.description}
+                  onChange={(e) => setNewClass({ ...newClass, description: e.target.value })}
+                  placeholder="e.g. Class description"
                 />
               </div>
               <Button
@@ -336,7 +335,7 @@ const ManageClasses = () => {
           <thead className="bg-muted">
             <tr>
               <th className="text-left p-3 font-medium text-muted-foreground">Name</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Level</th>
+              <th className="text-left p-3 font-medium text-muted-foreground">Description</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Created</th>
             </tr>
           </thead>
@@ -344,7 +343,7 @@ const ManageClasses = () => {
             {classes?.map((cls: any) => (
               <tr key={cls.id} className="border-t border-border">
                 <td className="p-3 text-foreground">{cls.name}</td>
-                <td className="p-3 text-muted-foreground">{cls.level || "—"}</td>
+                <td className="p-3 text-muted-foreground">{cls.description || "—"}</td>
                 <td className="p-3 text-muted-foreground">
                   {new Date(cls.created_at).toLocaleDateString()}
                 </td>
