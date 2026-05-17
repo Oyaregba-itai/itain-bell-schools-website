@@ -18,6 +18,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
 
   const adminTabs = [
     { id: "overview", label: "Overview", icon: BarChart3 },
+    { id: "profile", label: "Profile", icon: Users },
     { id: "requests", label: "Requests", icon: Users },
     { id: "users", label: "Manage Users", icon: Users },
     { id: "classes", label: "Classes", icon: BookOpen },
@@ -33,6 +34,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
 
   const teacherTabs = [
     { id: "overview", label: "Overview", icon: BarChart3 },
+    { id: "profile", label: "Profile", icon: Users },
     { id: "upload", label: "Upload Results", icon: BookOpen },
     { id: "my-results", label: "My Results", icon: BarChart3 },
     { id: "timetable", label: "Timetable", icon: Clock },
@@ -42,6 +44,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
 
   const parentTabs = [
     { id: "overview", label: "Overview", icon: BarChart3 },
+    { id: "profile", label: "Profile", icon: Users },
     { id: "results", label: "My Children's Results", icon: GraduationCap },
     { id: "timetable", label: "Timetable", icon: Clock },
     { id: "announcements", label: "Announcements", icon: Megaphone },
@@ -85,8 +88,13 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
           </nav>
 
           <div className="p-4 border-t border-border">
-            <div className="text-sm font-medium text-foreground truncate">{profile?.full_name}</div>
-            <div className="text-xs text-muted-foreground truncate">{roleLabel}</div>
+            <button 
+              onClick={() => { onTabChange("profile"); setSidebarOpen(false); }}
+              className="block w-full text-left hover:opacity-80 transition"
+            >
+              <div className="text-sm font-medium text-foreground truncate">{profile?.full_name}</div>
+              <div className="text-xs text-muted-foreground truncate">{roleLabel}</div>
+            </button>
             <Button variant="ghost" size="sm" onClick={signOut} className="mt-2 w-full justify-start text-muted-foreground">
               <LogOut size={16} className="mr-2" /> Sign Out
             </Button>

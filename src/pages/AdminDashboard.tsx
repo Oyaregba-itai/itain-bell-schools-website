@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
 import { BulkCreateStaffUsers } from "@/components/BulkCreateStaffUsers";
+import ProfilePage from "@/components/ProfilePage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +24,7 @@ const AdminDashboard = () => {
   return (
     <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
       {activeTab === "overview" && <AdminOverview />}
+      {activeTab === "profile" && <ProfilePage />}
       {activeTab === "users" && <ManageUsers />}
       {activeTab === "classes" && <ManageClasses />}
       {activeTab === "students" && <ManageStudents />}
