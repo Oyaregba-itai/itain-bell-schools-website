@@ -1,0 +1,221 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CheckCircle2 } from "lucide-react";
+
+const AdmissionsPage = () => {
+  const navigate = useNavigate();
+  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [form, setForm] = useState({
+    child_full_name: "",
+    date_of_birth: "",
+    gender: "",
+    class_applying_for: "",
+    school_section: "",
+    parent_name: "",
+    parent_email: "",
+    parent_phone: "",
+    address: "",
+    previous_school: "",
+    additional_info: "",
+  });
+
+  const set = (key: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm((f) => ({ ...f, [key]: e.target.value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const { error: err } = await supabase.from("admission_applications").insert([
+        {
+          child_full_name:   form.child_full_name,
+          date_of_birth:     form.date_of_birth     || null,
+          gender:            form.gender             || null,
+          class_applying_for: form.class_applying_for || null,
+          school_section:    form.school_section     || null,
+          parent_name:       form.parent_name,
+          parent_email:      form.parent_email,
+          parent_phone:      form.parent_phone       || null,
+          address:           form.address            || null,
+          previous_school:   form.previous_school    || null,
+          additional_info:   form.additional_info    || null,
+        },
+      ]);
+      if (err) throw err;
+      setSubmitted(true);
+    } catch (err: any) {
+      setError(err.message || "Submission failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navbar />
+
+      <div className="container max-w-2xl py-24">
+        {submitted ? (
+          <div className="text-center py-20">
+            <CheckCircle2 className="w-16 h-16 text-secondary mx-auto mb-5" />
+            <h2 className="text-3xl font-heading text-foreground mb-3">Application Received!</h2>
+            <p className="text-muted-foreground mb-2 max-w-md mx-auto">
+              Thank you for applying to Itain‑Bell Schools. We will review your application
+              and reach out to <strong>{form.parent_email}</strong> within <strong>5 working days</strong>.
+            </p>
+            <p className="text-sm text-muted-foreground mb-8">
+              Please check your email (including spam/junk) for a confirmation message.
+            </p>
+            <Button onClick={() => navigate("/")} variant="outline">Back to Home</Button>
+          </div>
+        ) : (
+          <>
+            <div className="mb-10">
+              <span className="inline-block px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-semibold mb-4">
+                2025/2026 Admissions Open
+              </span>
+              <h1 className="text-3xl md:text-4xl font-heading text-foreground mb-2">
+                Student Admission Application
+              </h1>
+              <p className="text-muted-foreground">
+                Complete the form below to apply for a place at Itain‑Bell Schools.
+                Fields marked <span className="text-destructive">*</span> are required.
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {/* Child details */}
+              <section className="bg-card rounded-2xl p-6 shadow-card space-y-4">
+                <h2 className="font-heading text-foreground text-lg border-b border-border pb-2">
+                  Child&apos;s Details
+                </h2>
+                <div>
+                  <Label>Full Name <span className="text-destructive">*</span></Label>
+                  <Input required value={form.child_full_name} onChange={set("child_full_name")} placeholder="Child's full name" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Date of Birth</Label>
+                    <Input type="date" value={form.date_of_birth} onChange={set("date_of_birth")} />
+                  </div>
+                  <div>
+                    <Label>Gender</Label>
+                    <Select value={form.gender} onValueChange={(v) => setForm((f) => ({ ...f, gender: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>School Section <span className="text-destructive">*</span></Label>
+                    <Select
+                      value={form.school_section}
+                      onValueChange={(v) => setForm((f) => ({ ...f, school_section: v }))}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Select section" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="creche">Crèche</SelectItem>
+                        <SelectItem value="nursery">Nursery</SelectItem>
+                        <SelectItem value="primary">Primary</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Class Applying For</Label>
+                    <Input
+                      value={form.class_applying_for}
+                      onChange={set("class_applying_for")}
+                      placeholder="e.g. Primary 1, Nursery 2"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Previous School (if any)</Label>
+                  <Input
+                    value={form.previous_school}
+                    onChange={set("previous_school")}
+                    placeholder="Name of previous school"
+                  />
+                </div>
+              </section>
+
+              {/* Parent/Guardian details */}
+              <section className="bg-card rounded-2xl p-6 shadow-card space-y-4">
+                <h2 className="font-heading text-foreground text-lg border-b border-border pb-2">
+                  Parent / Guardian Details
+                </h2>
+                <div>
+                  <Label>Full Name <span className="text-destructive">*</span></Label>
+                  <Input required value={form.parent_name} onChange={set("parent_name")} placeholder="Parent or guardian full name" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Email Address <span className="text-destructive">*</span></Label>
+                    <Input required type="email" value={form.parent_email} onChange={set("parent_email")} placeholder="email@example.com" />
+                  </div>
+                  <div>
+                    <Label>Phone Number</Label>
+                    <Input value={form.parent_phone} onChange={set("parent_phone")} placeholder="+234 xxx xxx xxxx" />
+                  </div>
+                </div>
+                <div>
+                  <Label>Home Address</Label>
+                  <Textarea
+                    value={form.address}
+                    onChange={set("address")}
+                    placeholder="Full home address"
+                    rows={3}
+                  />
+                </div>
+              </section>
+
+              {/* Additional info */}
+              <section className="bg-card rounded-2xl p-6 shadow-card space-y-4">
+                <h2 className="font-heading text-foreground text-lg border-b border-border pb-2">
+                  Additional Information
+                </h2>
+                <Textarea
+                  value={form.additional_info}
+                  onChange={set("additional_info")}
+                  placeholder="Anything else you'd like us to know about your child — special needs, health conditions, interests, etc."
+                  rows={4}
+                />
+              </section>
+
+              {error && (
+                <p className="text-destructive text-sm bg-destructive/10 rounded-lg px-4 py-3">{error}</p>
+              )}
+
+              <Button type="submit" className="w-full hero-gradient py-3" disabled={loading || !form.child_full_name || !form.parent_name || !form.parent_email || !form.school_section}>
+                {loading ? "Submitting Application..." : "Submit Application"}
+              </Button>
+
+              <p className="text-center text-xs text-muted-foreground">
+                By submitting, you agree that we may contact you about your child&apos;s application.
+              </p>
+            </form>
+          </>
+        )}
+      </div>
+
+      <Footer />
+    </div>
+  );
+};
+
+export default AdmissionsPage;

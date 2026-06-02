@@ -12,6 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { GraduationCap, BookOpen } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
+import EventsView from "@/components/EventsView";
+import MessagingView from "@/components/MessagingView";
+import ProfilePage from "@/components/ProfilePage";
 
 const TeacherDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -19,10 +22,13 @@ const TeacherDashboard = () => {
   return (
     <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
       {activeTab === "overview" && <TeacherOverview />}
+      {activeTab === "profile" && <ProfilePage />}
       {activeTab === "upload" && <UploadResults />}
       {activeTab === "my-results" && <MyResults />}
       {activeTab === "timetable" && <TimetableView />}
+      {activeTab === "events" && <EventsView />}
       {activeTab === "announcements" && <AnnouncementsView />}
+      {activeTab === "messaging" && <MessagingView />}
     </DashboardLayout>
   );
 };
@@ -82,10 +88,8 @@ const UploadResults = () => {
     student_id: "",
     subject_id: "",
     term_id: "",
-    assignment_score: "",
-    test_score: "",
-    exam_score: "",
-    continuous_assessment: "",
+    result_type: "mid_term" as "mid_term" | "end_of_term",
+    total_score: "",
     teacher_comments: "",
   });
 
@@ -128,24 +132,40 @@ const UploadResults = () => {
     enabled: !!selectedSubject?.class_id,
   });
 
+  const getGradeLetter = (score: number): string => {
+    if (score >= 28.5) return "A+";
+    if (score >= 27.0) return "A";
+    if (score >= 25.5) return "B+";
+    if (score >= 24.0) return "B";
+    if (score >= 22.5) return "C+";
+    if (score >= 21.0) return "C";
+    if (score >= 18.0) return "D";
+    return "E";
+  };
+
+  const getGradeRemark = (score: number): string => {
+    if (score >= 27.0) return "Outstanding";
+    if (score >= 24.0) return "Proficient";
+    if (score >= 21.0) return "Capable";
+    if (score >= 18.0) return "PTE";
+    return "NME";
+  };
+
+  const score = parseFloat(form.total_score) || 0;
+  const previewGrade = form.total_score ? getGradeLetter(score) : null;
+  const previewRemark = form.total_score ? getGradeRemark(score) : null;
+
   const upload = useMutation({
     mutationFn: async () => {
-      const totalScore =
-        (parseFloat(form.assignment_score) || 0) +
-        (parseFloat(form.test_score) || 0) +
-        (parseFloat(form.exam_score) || 0) +
-        (parseFloat(form.continuous_assessment) || 0);
-
+      const totalScore = parseFloat(form.total_score) || 0;
       const { error } = await supabase.from("results").insert([
         {
           student_id: form.student_id,
           subject_id: form.subject_id,
           term_id: form.term_id,
-          assignment_score: form.assignment_score || null,
-          test_score: form.test_score || null,
-          exam_score: form.exam_score || null,
-          continuous_assessment: form.continuous_assessment || null,
+          result_type: form.result_type,
           total_score: totalScore,
+          grade_letter: getGradeLetter(totalScore),
           teacher_comments: form.teacher_comments || null,
           uploaded_by: user!.id,
         },
@@ -159,10 +179,8 @@ const UploadResults = () => {
         student_id: "",
         subject_id: form.subject_id,
         term_id: form.term_id,
-        assignment_score: "",
-        test_score: "",
-        exam_score: "",
-        continuous_assessment: "",
+        result_type: form.result_type,
+        total_score: "",
         teacher_comments: "",
       });
     },
@@ -232,55 +250,49 @@ const UploadResults = () => {
           </Select>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label>Assignment Score</Label>
-            <Input
-              type="number"
-              step="0.01"
-              value={form.assignment_score}
-              onChange={(e) => setForm({ ...form, assignment_score: e.target.value })}
-              placeholder="0.00"
-            />
-          </div>
-          <div>
-            <Label>Test Score</Label>
-            <Input
-              type="number"
-              step="0.01"
-              value={form.test_score}
-              onChange={(e) => setForm({ ...form, test_score: e.target.value })}
-              placeholder="0.00"
-            />
-          </div>
-          <div>
-            <Label>Exam Score</Label>
-            <Input
-              type="number"
-              step="0.01"
-              value={form.exam_score}
-              onChange={(e) => setForm({ ...form, exam_score: e.target.value })}
-              placeholder="0.00"
-            />
-          </div>
-          <div>
-            <Label>Continuous Assessment</Label>
-            <Input
-              type="number"
-              step="0.01"
-              value={form.continuous_assessment}
-              onChange={(e) => setForm({ ...form, continuous_assessment: e.target.value })}
-              placeholder="0.00"
-            />
-          </div>
+        <div>
+          <Label>Result Type *</Label>
+          <Select
+            value={form.result_type}
+            onValueChange={(v) => setForm({ ...form, result_type: v as "mid_term" | "end_of_term" })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select result type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="mid_term">Mid Term</SelectItem>
+              <SelectItem value="end_of_term">End of Term</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div>
-          <Label>Comments (optional)</Label>
+          <Label>Score (out of 30) *</Label>
+          <Input
+            type="number"
+            step="0.5"
+            min="0"
+            max="30"
+            value={form.total_score}
+            onChange={(e) => setForm({ ...form, total_score: e.target.value })}
+            placeholder="e.g. 27.5"
+          />
+          {previewGrade && (
+            <p className="text-xs mt-1 font-semibold" style={{
+              color: score >= 27 ? "#7B2D8B" : score >= 24 ? "#166534" : score >= 21 ? "#1e40af" : score >= 18 ? "#c2410c" : "#b91c1c"
+            }}>
+              Grade: {previewGrade} — {previewRemark}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <Label>Teacher Comment (optional)</Label>
           <Textarea
             value={form.teacher_comments}
             onChange={(e) => setForm({ ...form, teacher_comments: e.target.value })}
-            placeholder="e.g. Excellent performance, needs improvement..."
+            placeholder="e.g. Fantastic progress! Keep it up."
+            rows={2}
           />
         </div>
 

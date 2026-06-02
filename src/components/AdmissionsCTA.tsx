@@ -28,9 +28,7 @@ const AdmissionsCTA = () => {
             </p>
             <div className="flex flex-wrap gap-4 justify-center">
               <a
-                href="https://itainbellschool.com/admissions"
-                target="_blank"
-                rel="noopener noreferrer"
+                href="/admissions"
                 className="px-8 py-3.5 rounded-lg bg-primary-foreground text-primary font-semibold hover:bg-primary-foreground/90 transition-colors"
               >
                 Start Application

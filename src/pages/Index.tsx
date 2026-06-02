@@ -4,6 +4,7 @@ import FeaturesSection from "@/components/FeaturesSection";
 import AcademicsSection from "@/components/AcademicsSection";
 import AdmissionsCTA from "@/components/AdmissionsCTA";
 import FacilitiesSection from "@/components/FacilitiesSection";
+import EventsSection from "@/components/EventsSection";
 import Footer from "@/components/Footer";
 
 const Index = () => {
@@ -15,6 +16,7 @@ const Index = () => {
       <AcademicsSection />
       <AdmissionsCTA />
       <FacilitiesSection />
+      <EventsSection />
       <Footer />
     </div>
   );

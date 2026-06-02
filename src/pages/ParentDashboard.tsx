@@ -3,9 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
-import { GraduationCap } from "lucide-react";
+import { GraduationCap, Printer } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
+import EventsView from "@/components/EventsView";
+import MessagingView from "@/components/MessagingView";
+import ProfilePage from "@/components/ProfilePage";
+import ReportCard from "@/components/ReportCard";
 
 const ParentDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -13,9 +17,12 @@ const ParentDashboard = () => {
   return (
     <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
       {activeTab === "overview" && <ParentOverview />}
+      {activeTab === "profile" && <ProfilePage />}
       {activeTab === "results" && <ChildrenResults />}
       {activeTab === "timetable" && <TimetableView />}
+      {activeTab === "events" && <EventsView />}
       {activeTab === "announcements" && <AnnouncementsView />}
+      {activeTab === "messaging" && <MessagingView />}
     </DashboardLayout>
   );
 };
@@ -95,6 +102,7 @@ const ParentOverview = () => {
 
 const ChildrenResults = () => {
   const { user } = useAuth();
+  const [reportCard, setReportCard] = useState<{ studentId: string; termId: string; resultType: "mid_term" | "end_of_term" } | null>(null);
 
   const { data: children } = useQuery({
     queryKey: ["my-children", user?.id],
@@ -154,9 +162,50 @@ const ChildrenResults = () => {
   const subjectsMap = allData?.subjectsMap || new Map();
   const termsMap = allData?.termsMap || new Map();
 
+  // Unique student+term pairs for report card buttons
+  const studentTermPairs = Array.from(
+    new Map(results.map((r: any) => [`${r.student_id}|${r.term_id}`, { studentId: r.student_id, termId: r.term_id }])).values()
+  );
+
   return (
     <div>
-      <h3 className="text-lg font-heading text-foreground mb-6">My Children's Results</h3>
+      {reportCard && (
+        <ReportCard
+          studentId={reportCard.studentId}
+          termId={reportCard.termId}
+          resultType={reportCard.resultType}
+          onClose={() => setReportCard(null)}
+        />
+      )}
+
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-heading text-foreground">My Children&apos;s Results</h3>
+        {studentTermPairs.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {studentTermPairs.map((pair: any) => {
+              const student = studentsMap.get(pair.studentId);
+              const term = termsMap.get(pair.termId);
+              return (
+                <span key={`${pair.studentId}|${pair.termId}`} className="flex gap-1">
+                  <button
+                    onClick={() => setReportCard({ ...pair, resultType: "mid_term" })}
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
+                  >
+                    <Printer size={12} /> {student?.first_name} — {term?.name} (Mid Term)
+                  </button>
+                  <button
+                    onClick={() => setReportCard({ ...pair, resultType: "end_of_term" })}
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-secondary/10 text-secondary hover:bg-secondary/20 transition-colors font-medium"
+                  >
+                    <Printer size={12} /> End of Term
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       <div className="bg-card rounded-xl shadow-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted">

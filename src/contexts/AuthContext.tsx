@@ -10,6 +10,7 @@ interface Profile {
   email: string;
   role: AppRole;
   phone?: string;
+  profile_picture_url?: string;
   created_at?: string;
 }
 
