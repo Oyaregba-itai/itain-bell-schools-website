@@ -1152,6 +1152,13 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
   );
 };
 
+const SUBJECT_NAMES = [
+  "Mathematics", "English Language", "Science", "Humanities", "Yoruba",
+  "Creative Art", "CRK", "Computing", "Vocational Education", "French",
+  "Global Perspectives", "Verbal Reasoning", "STEAM", "Diction",
+  "Quantitative Reasoning", "Life Skills", "Music", "PHE",
+];
+
 const ManageSubjects = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1250,7 +1257,12 @@ const ManageSubjects = () => {
             <div className="space-y-4">
               <div>
                 <Label>Subject Name</Label>
-                <Input value={newSubject.name} onChange={(e) => setNewSubject({ ...newSubject, name: e.target.value })} placeholder="e.g. Mathematics" />
+                <Select value={newSubject.name} onValueChange={(v) => setNewSubject({ ...newSubject, name: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
+                  <SelectContent>
+                    {SUBJECT_NAMES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Class</Label>
@@ -1266,7 +1278,8 @@ const ManageSubjects = () => {
                   <SelectContent>{teachers?.map((t: any) => <SelectItem key={t.user_id} value={t.user_id}>{t.full_name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <Button onClick={() => addSubject.mutate()} className="w-full hero-gradient" disabled={addSubject.isPending || !newSubject.name}>
+              <p className="text-xs text-muted-foreground">Same subject can be added for different classes with different teachers.</p>
+              <Button onClick={() => addSubject.mutate()} className="w-full hero-gradient" disabled={addSubject.isPending || !newSubject.name || !newSubject.class_id}>
                 {addSubject.isPending ? "Adding..." : "Add Subject"}
               </Button>
             </div>
@@ -1278,7 +1291,13 @@ const ManageSubjects = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Subject</DialogTitle></DialogHeader>
           {editing && <div className="space-y-4">
-            <div><Label>Subject Name</Label><Input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} /></div>
+            <div>
+              <Label>Subject Name</Label>
+              <Select value={editing.name} onValueChange={v => setEditing({ ...editing, name: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{SUBJECT_NAMES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
             <div>
               <Label>Class</Label>
               <Select value={editing.class_id || ""} onValueChange={v => setEditing({ ...editing, class_id: v })}>
