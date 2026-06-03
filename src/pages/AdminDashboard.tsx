@@ -12,12 +12,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, MessageCircle, UserPlus, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil } from "lucide-react";
+import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import MessagingView from "@/components/MessagingView";
-import GroupMessagingView from "@/components/GroupMessagingView";
 import ReportCard from "@/components/ReportCard";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -41,45 +41,215 @@ const AdminDashboard = () => {
   );
 };
 
+const GRADE_COLORS: Record<string, string> = {
+  "A+": "#7B2D8B", "A": "#9B4DCA",
+  "B+": "#166534", "B": "#16a34a",
+  "C+": "#1e40af", "C": "#3b82f6",
+  "D": "#c2410c", "E": "#b91c1c",
+};
+
 const AdminOverview = () => {
   const { data: stats } = useQuery({
     queryKey: ["admin-stats"],
     queryFn: async () => {
-      const [studentsRes, classesRes, subjectsRes, resultsRes, termsRes] = await Promise.all([
+      const [studentsRes, classesRes, subjectsRes, resultsRes, teachersRes] = await Promise.all([
         supabase.from("students").select("id", { count: "exact" }),
         supabase.from("classes").select("id", { count: "exact" }),
         supabase.from("subjects").select("id", { count: "exact" }),
         supabase.from("results").select("id", { count: "exact" }),
-        supabase.from("terms").select("id", { count: "exact" }),
+        supabase.from("user_roles").select("user_id", { count: "exact" }).eq("role", "teacher"),
       ]);
-
       return {
         students: studentsRes.count || 0,
         classes: classesRes.count || 0,
         subjects: subjectsRes.count || 0,
         results: resultsRes.count || 0,
-        terms: termsRes.count || 0,
+        teachers: teachersRes.count || 0,
       };
     },
   });
 
-  const cards = [
-    { label: "Students", value: stats?.students || 0, icon: GraduationCap },
-    { label: "Classes", value: stats?.classes || 0, icon: BookOpen },
-    { label: "Subjects", value: stats?.subjects || 0, icon: BookOpen },
-    { label: "Results Uploaded", value: stats?.results || 0, icon: BarChart3 },
-    { label: "Terms", value: stats?.terms || 0, icon: ClipboardCheck },
+  const { data: enrollmentData } = useQuery({
+    queryKey: ["enrollment-by-class"],
+    queryFn: async () => {
+      const { data: students } = await supabase.from("students").select("class_id");
+      const { data: classes } = await supabase.from("classes").select("id, name");
+      const counts: Record<string, number> = {};
+      (students || []).forEach((s: any) => { if (s.class_id) counts[s.class_id] = (counts[s.class_id] || 0) + 1; });
+      return (classes || [])
+        .map((c: any) => ({ name: c.name.replace("YEAR ", "Yr "), count: counts[c.id] || 0 }))
+        .filter((c) => c.count > 0)
+        .sort((a, b) => b.count - a.count);
+    },
+  });
+
+  const { data: gradeData } = useQuery({
+    queryKey: ["grade-distribution"],
+    queryFn: async () => {
+      const { data } = await supabase.from("results").select("grade_letter");
+      const counts: Record<string, number> = {};
+      (data || []).forEach((r: any) => { if (r.grade_letter) counts[r.grade_letter] = (counts[r.grade_letter] || 0) + 1; });
+      const order = ["A+", "A", "B+", "B", "C+", "C", "D", "E"];
+      return order.filter(g => counts[g]).map(g => ({ grade: g, count: counts[g] }));
+    },
+  });
+
+  const { data: subjectCoverage } = useQuery({
+    queryKey: ["subject-coverage"],
+    queryFn: async () => {
+      const { data } = await supabase.from("subjects").select("teacher_id");
+      const total = data?.length || 0;
+      const assigned = data?.filter((s: any) => s.teacher_id).length || 0;
+      return [
+        { name: "Assigned", value: assigned, fill: "#166534" },
+        { name: "Unassigned", value: total - assigned, fill: "#f59e0b" },
+      ];
+    },
+  });
+
+  const { data: recentResults } = useQuery({
+    queryKey: ["recent-results-overview"],
+    queryFn: async () => {
+      const { data } = await supabase.from("results").select("*").order("created_at", { ascending: false }).limit(6);
+      const rows = data || [];
+      const studentIds = [...new Set(rows.map((r: any) => r.student_id).filter(Boolean))];
+      const subjectIds = [...new Set(rows.map((r: any) => r.subject_id).filter(Boolean))];
+      const [sRes, subRes] = await Promise.all([
+        studentIds.length > 0 ? supabase.from("students").select("id, full_name").in("id", studentIds) : { data: [] },
+        subjectIds.length > 0 ? supabase.from("subjects").select("id, name").in("id", subjectIds) : { data: [] },
+      ]);
+      const sMap: Record<string, string> = {};
+      const subMap: Record<string, string> = {};
+      (sRes.data || []).forEach((s: any) => { sMap[s.id] = s.full_name; });
+      (subRes.data || []).forEach((s: any) => { subMap[s.id] = s.name; });
+      return rows.map((r: any) => ({ ...r, studentName: sMap[r.student_id] || "—", subjectName: subMap[r.subject_id] || "—" }));
+    },
+  });
+
+  const statCards = [
+    { label: "Students", value: stats?.students || 0, icon: GraduationCap, color: "text-blue-600", bg: "bg-blue-50" },
+    { label: "Classes", value: stats?.classes || 0, icon: BookOpen, color: "text-purple-600", bg: "bg-purple-50" },
+    { label: "Teachers", value: stats?.teachers || 0, icon: Users, color: "text-green-600", bg: "bg-green-50" },
+    { label: "Subjects", value: stats?.subjects || 0, icon: ClipboardCheck, color: "text-amber-600", bg: "bg-amber-50" },
+    { label: "Results Uploaded", value: stats?.results || 0, icon: BarChart3, color: "text-rose-600", bg: "bg-rose-50" },
   ];
 
+  const unassigned = subjectCoverage?.find(s => s.name === "Unassigned")?.value || 0;
+
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-      {cards.map((card) => (
-        <div key={card.label} className="bg-card rounded-xl p-5 shadow-card">
-          <card.icon className="text-primary mb-2" size={24} />
-          <div className="text-2xl font-heading text-foreground">{card.value}</div>
-          <div className="text-sm text-muted-foreground">{card.label}</div>
+    <div className="space-y-6">
+      {/* Stats row */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        {statCards.map((card) => (
+          <div key={card.label} className="bg-card rounded-xl p-5 shadow-card">
+            <div className={`w-10 h-10 rounded-lg ${card.bg} flex items-center justify-center mb-3`}>
+              <card.icon className={card.color} size={20} />
+            </div>
+            <div className="text-2xl font-heading text-foreground">{card.value}</div>
+            <div className="text-sm text-muted-foreground">{card.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {unassigned > 0 && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
+          <AlertCircle size={16} className="flex-shrink-0" />
+          <span><strong>{unassigned} subject{unassigned !== 1 ? "s" : ""}</strong> still need a teacher assigned. Go to Subjects to fix this.</span>
         </div>
-      ))}
+      )}
+
+      <div className="grid lg:grid-cols-2 gap-6">
+        {/* Enrollment by class */}
+        <div className="bg-card rounded-xl p-5 shadow-card">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp size={18} className="text-primary" />
+            <h4 className="font-heading font-semibold text-foreground">Enrollment by Class</h4>
+          </div>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={enrollmentData || []} layout="vertical" margin={{ left: 10, right: 20 }}>
+              <XAxis type="number" tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={70} />
+              <Tooltip formatter={(v) => [`${v} students`, "Enrollment"]} />
+              <Bar dataKey="count" radius={[0, 4, 4, 0]} fill="#166534" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Grade distribution */}
+        <div className="bg-card rounded-xl p-5 shadow-card">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 size={18} className="text-primary" />
+            <h4 className="font-heading font-semibold text-foreground">Grade Distribution</h4>
+          </div>
+          {gradeData?.length ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={gradeData} margin={{ left: -10 }}>
+                <XAxis dataKey="grade" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v) => [`${v} results`, "Count"]} />
+                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                  {gradeData.map((entry) => (
+                    <Cell key={entry.grade} fill={GRADE_COLORS[entry.grade] || "#6b7280"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[240px] flex items-center justify-center text-muted-foreground text-sm">No results uploaded yet</div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Subject coverage pie */}
+        <div className="bg-card rounded-xl p-5 shadow-card">
+          <div className="flex items-center gap-2 mb-4">
+            <BookOpen size={18} className="text-primary" />
+            <h4 className="font-heading font-semibold text-foreground">Subject Coverage</h4>
+          </div>
+          {subjectCoverage?.some(s => s.value > 0) ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie data={subjectCoverage} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
+                  {subjectCoverage?.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">No data yet</div>
+          )}
+        </div>
+
+        {/* Recent results */}
+        <div className="bg-card rounded-xl p-5 shadow-card lg:col-span-2">
+          <div className="flex items-center gap-2 mb-4">
+            <ClipboardCheck size={18} className="text-primary" />
+            <h4 className="font-heading font-semibold text-foreground">Recent Results</h4>
+          </div>
+          {recentResults?.length ? (
+            <div className="space-y-2">
+              {recentResults.map((r: any) => (
+                <div key={r.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{r.studentName}</p>
+                    <p className="text-xs text-muted-foreground">{r.subjectName} · {r.result_type?.replace("_", " ")}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">{r.total_score}/30</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: GRADE_COLORS[r.grade_letter] + "22", color: GRADE_COLORS[r.grade_letter] }}>
+                      {r.grade_letter}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="h-[160px] flex items-center justify-center text-muted-foreground text-sm">No results uploaded yet</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
