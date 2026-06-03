@@ -1401,32 +1401,29 @@ const SUBJECT_NAMES = [
 ];
 
 const ManageSubjects = () => {
+  const [viewing, setViewing] = useState<string | null>(null);
+  if (viewing) return <SubjectDetail subjectName={viewing} onBack={() => setViewing(null)} />;
+  return <SubjectList onView={setViewing} />;
+};
+
+const SubjectList = ({ onView }: { onView: (name: string) => void }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newSubject, setNewSubject] = useState({ name: "", class_id: "", teacher_id: "" });
-  const [editing, setEditing] = useState<any | null>(null);
 
-  const { data: subjects } = useQuery({
-    queryKey: ["all-subjects"],
+  const { data: grouped } = useQuery({
+    queryKey: ["all-subjects-grouped"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("subjects").select("*").order("name", { ascending: true });
+      const { data, error } = await supabase.from("subjects").select("id, name, class_id, teacher_id").order("name");
       if (error) throw error;
       const rows = data || [];
-
-      const classIds = [...new Set(rows.map((s: any) => s.class_id).filter(Boolean))];
-      const teacherIds = [...new Set(rows.map((s: any) => s.teacher_id).filter(Boolean))];
-
-      const [classRes, teacherRes] = await Promise.all([
-        classIds.length > 0 ? supabase.from("classes").select("id, name").in("id", classIds) : { data: [] },
-        teacherIds.length > 0 ? supabase.from("profiles").select("user_id, full_name").in("user_id", teacherIds) : { data: [] },
-      ]);
-
-      const classMap: Record<string, string> = {};
-      const teacherMap: Record<string, string> = {};
-      (classRes.data || []).forEach((c: any) => { classMap[c.id] = c.name; });
-      (teacherRes.data || []).forEach((t: any) => { teacherMap[t.user_id] = t.full_name; });
-
-      return rows.map((s: any) => ({ ...s, className: classMap[s.class_id] || null, teacherName: teacherMap[s.teacher_id] || null }));
+      const map: Record<string, { name: string; total: number; assigned: number }> = {};
+      rows.forEach((s: any) => {
+        if (!map[s.name]) map[s.name] = { name: s.name, total: 0, assigned: 0 };
+        map[s.name].total++;
+        if (s.teacher_id) map[s.name].assigned++;
+      });
+      return Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
     },
   });
 
@@ -1454,33 +1451,14 @@ const ManageSubjects = () => {
   const addSubject = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("subjects").insert([{
-        name: newSubject.name,
-        class_id: newSubject.class_id || null,
-        teacher_id: newSubject.teacher_id || null,
+        name: newSubject.name, class_id: newSubject.class_id || null, teacher_id: newSubject.teacher_id || null,
       }]);
       if (error) throw error;
     },
     onSuccess: () => {
-      toast({ title: "Subject added successfully" });
-      queryClient.invalidateQueries({ queryKey: ["all-subjects"] });
+      toast({ title: "Subject added" });
+      queryClient.invalidateQueries({ queryKey: ["all-subjects-grouped"] });
       setNewSubject({ name: "", class_id: "", teacher_id: "" });
-    },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
-  });
-
-  const updateSubject = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("subjects").update({
-        name: editing.name,
-        class_id: editing.class_id || null,
-        teacher_id: editing.teacher_id || null,
-      }).eq("id", editing.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "Subject updated" });
-      queryClient.invalidateQueries({ queryKey: ["all-subjects"] });
-      setEditing(null);
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -1488,21 +1466,19 @@ const ManageSubjects = () => {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h3 className="text-lg font-heading text-foreground">Manage Subjects</h3>
+        <h3 className="text-lg font-heading text-foreground">Subjects</h3>
         <Dialog>
           <DialogTrigger asChild>
-            <Button className="hero-gradient"><Plus size={18} className="mr-2" />Add Subject</Button>
+            <Button className="hero-gradient"><Plus size={18} className="mr-2" />Add Subject to Class</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Add New Subject</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>Assign Subject to Class</DialogTitle></DialogHeader>
             <div className="space-y-4">
               <div>
                 <Label>Subject Name</Label>
                 <Select value={newSubject.name} onValueChange={(v) => setNewSubject({ ...newSubject, name: v })}>
                   <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
-                  <SelectContent>
-                    {SUBJECT_NAMES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{SUBJECT_NAMES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
@@ -1513,70 +1489,165 @@ const ManageSubjects = () => {
                 </Select>
               </div>
               <div>
-                <Label>Teacher</Label>
+                <Label>Teacher (optional)</Label>
                 <Select value={newSubject.teacher_id} onValueChange={(v) => setNewSubject({ ...newSubject, teacher_id: v })}>
                   <SelectTrigger><SelectValue placeholder="Select teacher" /></SelectTrigger>
                   <SelectContent>{teachers?.map((t: any) => <SelectItem key={t.user_id} value={t.user_id}>{t.full_name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <p className="text-xs text-muted-foreground">Same subject can be added for different classes with different teachers.</p>
               <Button onClick={() => addSubject.mutate()} className="w-full hero-gradient" disabled={addSubject.isPending || !newSubject.name || !newSubject.class_id}>
-                {addSubject.isPending ? "Adding..." : "Add Subject"}
+                {addSubject.isPending ? "Adding..." : "Add"}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
       </div>
 
-      <Dialog open={!!editing} onOpenChange={open => !open && setEditing(null)}>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {grouped?.map((s) => (
+          <button
+            key={s.name}
+            onClick={() => onView(s.name)}
+            className="bg-card rounded-xl p-4 shadow-card border border-border text-left hover:border-primary/40 hover:shadow-md transition-all group"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-medium text-foreground group-hover:text-primary transition-colors">{s.name}</p>
+                <p className="text-xs text-muted-foreground mt-1">{s.total} {s.total === 1 ? "class" : "classes"}</p>
+              </div>
+              <div className="flex flex-col items-end gap-1">
+                <ChevronRight size={16} className="text-muted-foreground group-hover:text-primary transition-colors" />
+                {s.assigned < s.total && (
+                  <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
+                    {s.total - s.assigned} unassigned
+                  </span>
+                )}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const SubjectDetail = ({ subjectName, onBack }: { subjectName: string; onBack: () => void }) => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [editingRow, setEditingRow] = useState<any | null>(null);
+
+  const { data: rows } = useQuery({
+    queryKey: ["subject-detail", subjectName],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("subjects").select("*").eq("name", subjectName);
+      if (error) throw error;
+      const subjects = data || [];
+      const classIds = [...new Set(subjects.map((s: any) => s.class_id).filter(Boolean))];
+      const teacherIds = [...new Set(subjects.map((s: any) => s.teacher_id).filter(Boolean))];
+      const [classRes, teacherRes] = await Promise.all([
+        classIds.length > 0 ? supabase.from("classes").select("id, name").in("id", classIds as string[]) : { data: [] },
+        teacherIds.length > 0 ? supabase.from("profiles").select("user_id, full_name").in("user_id", teacherIds as string[]) : { data: [] },
+      ]);
+      const classMap: Record<string, string> = {};
+      const teacherMap: Record<string, string> = {};
+      (classRes.data || []).forEach((c: any) => { classMap[c.id] = c.name; });
+      (teacherRes.data || []).forEach((t: any) => { teacherMap[t.user_id] = t.full_name; });
+      return subjects
+        .map((s: any) => ({ ...s, className: classMap[s.class_id] || "—", teacherName: teacherMap[s.teacher_id] || null }))
+        .sort((a: any, b: any) => a.className.localeCompare(b.className));
+    },
+  });
+
+  const { data: teachers } = useQuery({
+    queryKey: ["teachers-for-subjects"],
+    queryFn: async () => {
+      const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "teacher");
+      const teacherIds = roles?.map((r: any) => r.user_id) || [];
+      if (!teacherIds.length) return [];
+      const { data } = await supabase.from("profiles").select("user_id, full_name").in("user_id", teacherIds).order("full_name");
+      return data || [];
+    },
+  });
+
+  const updateTeacher = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("subjects")
+        .update({ teacher_id: editingRow.teacher_id || null })
+        .eq("id", editingRow.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Teacher updated" });
+      queryClient.invalidateQueries({ queryKey: ["subject-detail", subjectName] });
+      queryClient.invalidateQueries({ queryKey: ["all-subjects-grouped"] });
+      setEditingRow(null);
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const assigned = rows?.filter((r: any) => r.teacher_id).length || 0;
+  const total = rows?.length || 0;
+
+  return (
+    <div className="space-y-6">
+      <button onClick={onBack} className="flex items-center gap-2 text-muted-foreground hover:text-foreground text-sm transition-colors">
+        <ChevronLeft size={18} /> Back to Subjects
+      </button>
+
+      <div className="bg-card rounded-xl p-5 shadow-card">
+        <h2 className="text-xl font-heading text-foreground">{subjectName}</h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          {total} {total === 1 ? "class" : "classes"} · {assigned} of {total} teachers assigned
+          {assigned < total && <span className="ml-2 text-amber-600 font-medium">({total - assigned} unassigned)</span>}
+        </p>
+      </div>
+
+      <Dialog open={!!editingRow} onOpenChange={open => !open && setEditingRow(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Edit Subject</DialogTitle></DialogHeader>
-          {editing && <div className="space-y-4">
-            <div>
-              <Label>Subject Name</Label>
-              <Select value={editing.name} onValueChange={v => setEditing({ ...editing, name: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{SUBJECT_NAMES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Class</Label>
-              <Select value={editing.class_id || ""} onValueChange={v => setEditing({ ...editing, class_id: v })}>
-                <SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger>
-                <SelectContent>{classes?.map((cls: any) => <SelectItem key={cls.id} value={cls.id}>{cls.name}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
+          <DialogHeader><DialogTitle>Assign Teacher — {editingRow?.className}</DialogTitle></DialogHeader>
+          {editingRow && <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Subject: <span className="font-medium text-foreground">{subjectName}</span></p>
             <div>
               <Label>Teacher</Label>
-              <Select value={editing.teacher_id || ""} onValueChange={v => setEditing({ ...editing, teacher_id: v })}>
+              <Select value={editingRow.teacher_id || ""} onValueChange={v => setEditingRow({ ...editingRow, teacher_id: v })}>
                 <SelectTrigger><SelectValue placeholder="Select teacher" /></SelectTrigger>
-                <SelectContent>{teachers?.map((t: any) => <SelectItem key={t.user_id} value={t.user_id}>{t.full_name}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  <SelectItem value="">— Unassigned —</SelectItem>
+                  {teachers?.map((t: any) => <SelectItem key={t.user_id} value={t.user_id}>{t.full_name}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
-            <Button className="w-full hero-gradient" onClick={() => updateSubject.mutate()} disabled={updateSubject.isPending || !editing.name}>
-              {updateSubject.isPending ? "Saving..." : "Save Changes"}
+            <Button className="w-full hero-gradient" onClick={() => updateTeacher.mutate()} disabled={updateTeacher.isPending}>
+              {updateTeacher.isPending ? "Saving..." : "Save"}
             </Button>
           </div>}
         </DialogContent>
       </Dialog>
 
-      <div className="bg-card rounded-xl shadow-card overflow-x-auto">
+      <div className="bg-card rounded-xl shadow-card overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-muted">
             <tr>
-              <th className="text-left p-3 font-medium text-muted-foreground">Name</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Class</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Teacher</th>
               <th className="p-3" />
             </tr>
           </thead>
           <tbody>
-            {subjects?.map((subject: any) => (
-              <tr key={subject.id} className="border-t border-border">
-                <td className="p-3 text-foreground">{subject.name}</td>
-                <td className="p-3 text-muted-foreground">{subject.className || "—"}</td>
-                <td className="p-3 text-muted-foreground">{subject.teacherName || "—"}</td>
-                <td className="p-3"><button onClick={() => setEditing({ ...subject })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button></td>
+            {rows?.map((row: any) => (
+              <tr key={row.id} className="border-t border-border">
+                <td className="p-3 font-medium text-foreground">{row.className}</td>
+                <td className="p-3">
+                  {row.teacherName
+                    ? <span className="text-foreground">{row.teacherName}</span>
+                    : <span className="text-amber-600 text-xs font-medium bg-amber-50 px-2 py-0.5 rounded-full">Unassigned</span>
+                  }
+                </td>
+                <td className="p-3">
+                  <button onClick={() => setEditingRow({ ...row })} className="text-muted-foreground hover:text-primary transition-colors">
+                    <Pencil size={14} />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
