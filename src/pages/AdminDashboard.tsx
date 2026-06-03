@@ -1477,13 +1477,13 @@ const ManageSubjects = () => {
 const ManageTerms = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [newTerm, setNewTerm] = useState({ name: "", start_date: "", end_date: "", is_active: false });
+  const [newTerm, setNewTerm] = useState({ name: "", academic_year: "2025/2026", is_active: false });
   const [editing, setEditing] = useState<any | null>(null);
 
   const { data: terms } = useQuery({
     queryKey: ["all-terms"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("terms").select("*").order("start_date", { ascending: false });
+      const { data, error } = await supabase.from("terms").select("*").order("created_at", { ascending: true });
       if (error) throw error;
       return data || [];
     },
@@ -1493,8 +1493,7 @@ const ManageTerms = () => {
     mutationFn: async () => {
       const { error } = await supabase.from("terms").insert([{
         name: newTerm.name,
-        start_date: newTerm.start_date || null,
-        end_date: newTerm.end_date || null,
+        academic_year: newTerm.academic_year,
         is_active: newTerm.is_active,
       }]);
       if (error) throw error;
@@ -1502,7 +1501,7 @@ const ManageTerms = () => {
     onSuccess: () => {
       toast({ title: "Term created successfully" });
       queryClient.invalidateQueries({ queryKey: ["all-terms"] });
-      setNewTerm({ name: "", start_date: "", end_date: "", is_active: false });
+      setNewTerm({ name: "", academic_year: "2025/2026", is_active: false });
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -1511,8 +1510,7 @@ const ManageTerms = () => {
     mutationFn: async () => {
       const { error } = await supabase.from("terms").update({
         name: editing.name,
-        start_date: editing.start_date || null,
-        end_date: editing.end_date || null,
+        academic_year: editing.academic_year,
         is_active: editing.is_active,
       }).eq("id", editing.id);
       if (error) throw error;
@@ -1538,17 +1536,18 @@ const ManageTerms = () => {
             <div className="space-y-4">
               <div>
                 <Label>Term Name</Label>
-                <Input value={newTerm.name} onChange={(e) => setNewTerm({ ...newTerm, name: e.target.value })} placeholder="e.g. First Term 2026" />
+                <Select value={newTerm.name} onValueChange={v => setNewTerm({ ...newTerm, name: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select term" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Christmas Term">Christmas Term</SelectItem>
+                    <SelectItem value="Lent Term">Lent Term</SelectItem>
+                    <SelectItem value="Trinity Term">Trinity Term</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Start Date</Label>
-                  <Input type="date" value={newTerm.start_date} onChange={(e) => setNewTerm({ ...newTerm, start_date: e.target.value })} />
-                </div>
-                <div>
-                  <Label>End Date</Label>
-                  <Input type="date" value={newTerm.end_date} onChange={(e) => setNewTerm({ ...newTerm, end_date: e.target.value })} />
-                </div>
+              <div>
+                <Label>Academic Year</Label>
+                <Input value={newTerm.academic_year} onChange={(e) => setNewTerm({ ...newTerm, academic_year: e.target.value })} placeholder="e.g. 2025/2026" />
               </div>
               <div className="flex items-center space-x-2">
                 <input type="checkbox" id="active" checked={newTerm.is_active} onChange={(e) => setNewTerm({ ...newTerm, is_active: e.target.checked })} className="rounded" />
@@ -1566,11 +1565,18 @@ const ManageTerms = () => {
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Term</DialogTitle></DialogHeader>
           {editing && <div className="space-y-4">
-            <div><Label>Term Name</Label><Input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} /></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div><Label>Start Date</Label><Input type="date" value={editing.start_date?.split("T")[0] || ""} onChange={e => setEditing({ ...editing, start_date: e.target.value })} /></div>
-              <div><Label>End Date</Label><Input type="date" value={editing.end_date?.split("T")[0] || ""} onChange={e => setEditing({ ...editing, end_date: e.target.value })} /></div>
+            <div>
+              <Label>Term Name</Label>
+              <Select value={editing.name} onValueChange={v => setEditing({ ...editing, name: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Christmas Term">Christmas Term</SelectItem>
+                  <SelectItem value="Lent Term">Lent Term</SelectItem>
+                  <SelectItem value="Trinity Term">Trinity Term</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            <div><Label>Academic Year</Label><Input value={editing.academic_year || ""} onChange={e => setEditing({ ...editing, academic_year: e.target.value })} placeholder="e.g. 2025/2026" /></div>
             <div className="flex items-center space-x-2">
               <input type="checkbox" id="edit-active" checked={!!editing.is_active} onChange={e => setEditing({ ...editing, is_active: e.target.checked })} className="rounded" />
               <Label htmlFor="edit-active" className="cursor-pointer">Active term</Label>
@@ -1587,8 +1593,7 @@ const ManageTerms = () => {
           <thead className="bg-muted">
             <tr>
               <th className="text-left p-3 font-medium text-muted-foreground">Name</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Start Date</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">End Date</th>
+              <th className="text-left p-3 font-medium text-muted-foreground">Academic Year</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Status</th>
               <th className="p-3" />
             </tr>
@@ -1597,8 +1602,7 @@ const ManageTerms = () => {
             {terms?.map((term: any) => (
               <tr key={term.id} className="border-t border-border">
                 <td className="p-3 text-foreground">{term.name}</td>
-                <td className="p-3 text-muted-foreground">{term.start_date ? new Date(term.start_date).toLocaleDateString() : "—"}</td>
-                <td className="p-3 text-muted-foreground">{term.end_date ? new Date(term.end_date).toLocaleDateString() : "—"}</td>
+                <td className="p-3 text-muted-foreground">{term.academic_year || "—"}</td>
                 <td className="p-3">
                   <span className={`px-2 py-1 rounded-md text-xs font-semibold ${term.is_active ? "bg-secondary/10 text-secondary" : "bg-muted text-muted-foreground"}`}>
                     {term.is_active ? "Active" : "Inactive"}
