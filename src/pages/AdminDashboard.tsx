@@ -402,11 +402,100 @@ const ManageUsers = () => {
   );
 };
 
+const ClassDetail = ({ cls, onBack }: { cls: any; onBack: () => void }) => {
+  const { data: students } = useQuery({
+    queryKey: ["class-students-detail", cls.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("students").select("*").eq("class_id", cls.id).order("full_name");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: subjects } = useQuery({
+    queryKey: ["class-subjects-detail", cls.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("subjects").select("*").eq("class_id", cls.id).order("name");
+      if (error) throw error;
+      const rows = data || [];
+      const teacherIds = [...new Set(rows.map((s: any) => s.teacher_id).filter(Boolean))];
+      let teacherMap: Record<string, string> = {};
+      if (teacherIds.length > 0) {
+        const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", teacherIds as string[]);
+        (profiles || []).forEach((p: any) => { teacherMap[p.user_id] = p.full_name; });
+      }
+      return rows.map((s: any) => ({ ...s, teacherName: teacherMap[s.teacher_id] || "—" }));
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      <button onClick={onBack} className="flex items-center gap-2 text-muted-foreground hover:text-foreground text-sm transition-colors">
+        <ChevronLeft size={18} /> Back to Classes
+      </button>
+
+      <div className="bg-card rounded-xl p-5 shadow-card">
+        <h2 className="text-xl font-heading text-foreground">{cls.name}</h2>
+        {cls.description && <p className="text-muted-foreground text-sm mt-1">{cls.description}</p>}
+        <div className="flex gap-3 mt-2 text-sm text-muted-foreground">
+          <span>{students?.length || 0} students</span>
+          <span>·</span>
+          <span>{subjects?.length || 0} subjects</span>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Students */}
+        <div className="bg-card rounded-xl p-5 shadow-card">
+          <h4 className="font-heading font-semibold text-foreground mb-4">Students</h4>
+          <div className="space-y-2">
+            {students?.map((s: any, i: number) => (
+              <div key={s.id} className="flex items-center gap-3 p-2 rounded-lg bg-muted/40">
+                <span className="text-xs text-muted-foreground w-5 text-right">{i + 1}.</span>
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
+                  {s.avatar_url
+                    ? <img src={s.avatar_url} className="w-full h-full rounded-full object-cover" />
+                    : (s.full_name?.[0] || "?").toUpperCase()
+                  }
+                </div>
+                <span className="text-sm text-foreground">{s.full_name}</span>
+              </div>
+            ))}
+            {!students?.length && <p className="text-sm text-muted-foreground">No students assigned yet.</p>}
+          </div>
+        </div>
+
+        {/* Subjects & Teachers */}
+        <div className="bg-card rounded-xl p-5 shadow-card">
+          <h4 className="font-heading font-semibold text-foreground mb-4">Subjects & Teachers</h4>
+          <div className="space-y-2">
+            {subjects?.map((s: any) => (
+              <div key={s.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/40">
+                <div className="flex items-center gap-2">
+                  <BookOpen size={14} className="text-primary flex-shrink-0" />
+                  <span className="text-sm font-medium text-foreground">{s.name}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">{s.teacherName}</span>
+              </div>
+            ))}
+            {!subjects?.length && <p className="text-sm text-muted-foreground">No subjects assigned yet.</p>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ManageClasses = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newClass, setNewClass] = useState({ name: "", description: "" });
   const [editing, setEditing] = useState<any | null>(null);
+  const [viewing, setViewing] = useState<any | null>(null);
+
+  if (viewing) {
+    return <ClassDetail cls={viewing} onBack={() => setViewing(null)} />;
+  }
 
   const { data: classes } = useQuery({
     queryKey: ["all-classes"],
@@ -526,7 +615,12 @@ const ManageClasses = () => {
                 <td className="p-3 text-foreground">{cls.name}</td>
                 <td className="p-3 text-muted-foreground">{cls.description || "—"}</td>
                 <td className="p-3 text-muted-foreground">{new Date(cls.created_at).toLocaleDateString()}</td>
-                <td className="p-3"><button onClick={() => setEditing({ ...cls })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button></td>
+                <td className="p-3">
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setViewing(cls)} className="text-xs text-primary hover:underline font-medium flex items-center gap-1">View <ChevronRight size={13} /></button>
+                    <button onClick={() => setEditing({ ...cls })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -812,9 +906,23 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
       (subjectsRes.data || []).forEach((s: any) => { subjMap[s.id] = s.name; });
       (termsRes.data || []).forEach((t: any) => { termMap[t.id] = t.name; });
 
+      // Subjects assigned to this student's class
+      let classSubjects: any[] = [];
+      if (student?.class_id) {
+        const { data: subjectsData } = await supabase.from("subjects").select("*").eq("class_id", student.class_id).order("name");
+        const subjectTeacherIds = [...new Set((subjectsData || []).map((s: any) => s.teacher_id).filter(Boolean))];
+        let subjectTeacherMap: Record<string, string> = {};
+        if (subjectTeacherIds.length > 0) {
+          const { data: teacherProfiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", subjectTeacherIds as string[]);
+          (teacherProfiles || []).forEach((p: any) => { subjectTeacherMap[p.user_id] = p.full_name; });
+        }
+        classSubjects = (subjectsData || []).map((s: any) => ({ ...s, teacherName: subjectTeacherMap[s.teacher_id] || "—" }));
+      }
+
       return {
         student: { ...student, className },
         parents,
+        classSubjects,
         results: results.map((r: any) => ({
           ...r,
           subjectName: subjMap[r.subject_id] || "—",
@@ -892,7 +1000,7 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
   }
   if (!data) return null;
 
-  const { student, parents, results } = data;
+  const { student, parents, classSubjects, results } = data;
   const sName = (student as any).full_name || `${(student as any).first_name || ""} ${(student as any).last_name || ""}`.trim() || "Student";
   const age = (student as any).date_of_birth
     ? `${new Date().getFullYear() - new Date((student as any).date_of_birth).getFullYear()} years`
@@ -1017,6 +1125,26 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
               ))}
             </div>
         }
+      </div>
+
+      {/* Subjects & Teachers */}
+      <div className="bg-card rounded-xl p-5 shadow-card">
+        <h4 className="font-heading text-foreground font-semibold mb-4">Subjects & Teachers</h4>
+        {classSubjects.length > 0 ? (
+          <div className="grid sm:grid-cols-2 gap-2">
+            {classSubjects.map((s: any) => (
+              <div key={s.id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40">
+                <div className="flex items-center gap-2">
+                  <BookOpen size={13} className="text-primary flex-shrink-0" />
+                  <span className="text-sm font-medium text-foreground">{s.name}</span>
+                </div>
+                <span className="text-xs text-muted-foreground ml-2">{s.teacherName}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No subjects assigned to this class yet.</p>
+        )}
       </div>
 
       {/* Recent results */}
