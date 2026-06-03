@@ -487,15 +487,16 @@ const ClassDetail = ({ cls, onBack }: { cls: any; onBack: () => void }) => {
 };
 
 const ManageClasses = () => {
+  const [viewing, setViewing] = useState<any | null>(null);
+  if (viewing) return <ClassDetail cls={viewing} onBack={() => setViewing(null)} />;
+  return <ClassList onView={setViewing} />;
+};
+
+const ClassList = ({ onView }: { onView: (cls: any) => void }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newClass, setNewClass] = useState({ name: "", description: "" });
   const [editing, setEditing] = useState<any | null>(null);
-  const [viewing, setViewing] = useState<any | null>(null);
-
-  if (viewing) {
-    return <ClassDetail cls={viewing} onBack={() => setViewing(null)} />;
-  }
 
   const { data: classes } = useQuery({
     queryKey: ["all-classes"],
@@ -617,7 +618,7 @@ const ManageClasses = () => {
                 <td className="p-3 text-muted-foreground">{new Date(cls.created_at).toLocaleDateString()}</td>
                 <td className="p-3">
                   <div className="flex items-center gap-3">
-                    <button onClick={() => setViewing(cls)} className="text-xs text-primary hover:underline font-medium flex items-center gap-1">View <ChevronRight size={13} /></button>
+                    <button onClick={() => onView(cls)} className="text-xs text-primary hover:underline font-medium flex items-center gap-1">View <ChevronRight size={13} /></button>
                     <button onClick={() => setEditing({ ...cls })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button>
                   </div>
                 </td>
