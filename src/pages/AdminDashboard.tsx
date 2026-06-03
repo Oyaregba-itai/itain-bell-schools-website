@@ -522,6 +522,16 @@ const ClassDetail = ({ cls, onBack }: { cls: any; onBack: () => void }) => {
     },
   });
 
+  const { data: headTeacherName } = useQuery({
+    queryKey: ["class-head-teacher", cls.head_teacher_id],
+    queryFn: async () => {
+      if (!cls.head_teacher_id) return null;
+      const { data } = await supabase.from("profiles").select("full_name").eq("user_id", cls.head_teacher_id).single();
+      return data?.full_name || null;
+    },
+    enabled: !!cls.head_teacher_id,
+  });
+
   return (
     <div className="space-y-6">
       <button onClick={onBack} className="flex items-center gap-2 text-muted-foreground hover:text-foreground text-sm transition-colors">
@@ -530,7 +540,14 @@ const ClassDetail = ({ cls, onBack }: { cls: any; onBack: () => void }) => {
 
       <div className="bg-card rounded-xl p-5 shadow-card">
         <h2 className="text-xl font-heading text-foreground">{cls.name}</h2>
-        {cls.description && <p className="text-muted-foreground text-sm mt-1">{cls.description}</p>}
+        {headTeacherName && (
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full font-medium">
+              Head of Class: {headTeacherName}
+            </span>
+          </div>
+        )}
+        {cls.description && <p className="text-muted-foreground text-sm mt-2">{cls.description}</p>}
         <div className="flex gap-3 mt-2 text-sm text-muted-foreground">
           <span>{students?.length || 0} students</span>
           <span>·</span>
@@ -595,12 +612,16 @@ const ClassList = ({ onView }: { onView: (cls: any) => void }) => {
   const { data: classes } = useQuery({
     queryKey: ["all-classes"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("classes")
-        .select("*")
-        .order("name", { ascending: true });
+      const { data, error } = await supabase.from("classes").select("*").order("name", { ascending: true });
       if (error) throw error;
-      return data || [];
+      const rows = data || [];
+      const headIds = [...new Set(rows.map((c: any) => c.head_teacher_id).filter(Boolean))];
+      let headMap: Record<string, string> = {};
+      if (headIds.length > 0) {
+        const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", headIds as string[]);
+        (profiles || []).forEach((p: any) => { headMap[p.user_id] = p.full_name; });
+      }
+      return rows.map((c: any) => ({ ...c, headTeacherName: headMap[c.head_teacher_id] || null }));
     },
   });
 
@@ -699,17 +720,17 @@ const ClassList = ({ onView }: { onView: (cls: any) => void }) => {
           <thead className="bg-muted">
             <tr>
               <th className="text-left p-3 font-medium text-muted-foreground">Name</th>
+              <th className="text-left p-3 font-medium text-muted-foreground">Head of Class</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Description</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Created</th>
               <th className="p-3" />
             </tr>
           </thead>
           <tbody>
             {classes?.map((cls: any) => (
               <tr key={cls.id} className="border-t border-border">
-                <td className="p-3 text-foreground">{cls.name}</td>
+                <td className="p-3 text-foreground font-medium">{cls.name}</td>
+                <td className="p-3 text-muted-foreground text-sm">{(cls as any).headTeacherName || <span className="text-xs text-muted-foreground/50">—</span>}</td>
                 <td className="p-3 text-muted-foreground">{cls.description || "—"}</td>
-                <td className="p-3 text-muted-foreground">{new Date(cls.created_at).toLocaleDateString()}</td>
                 <td className="p-3">
                   <div className="flex items-center gap-3">
                     <button onClick={() => onView(cls)} className="text-xs text-primary hover:underline font-medium flex items-center gap-1">View <ChevronRight size={13} /></button>
@@ -965,11 +986,16 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
         .from("students").select("*").eq("id", studentId).single();
       if (studentError) throw studentError;
 
-      // Fetch class name separately if class_id exists
+      // Fetch class name and head teacher separately if class_id exists
       let className: string | null = null;
+      let headTeacherName: string | null = null;
       if (student?.class_id) {
-        const { data: cls } = await supabase.from("classes").select("name").eq("id", student.class_id).single();
+        const { data: cls } = await supabase.from("classes").select("name, head_teacher_id").eq("id", student.class_id).single();
         className = cls?.name || null;
+        if (cls?.head_teacher_id) {
+          const { data: headProfile } = await supabase.from("profiles").select("full_name").eq("user_id", cls.head_teacher_id).single();
+          headTeacherName = headProfile?.full_name || null;
+        }
       }
 
       // Parent links
@@ -1015,7 +1041,7 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
       }
 
       return {
-        student: { ...student, className },
+        student: { ...student, className, headTeacherName },
         parents,
         classSubjects,
         results: results.map((r: any) => ({
@@ -1193,6 +1219,7 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
               ["Admission Number", (student as any).admission_number || "—"],
               ["Student ID", (student as any).student_id || "—"],
               ["Class", (student as any).className || "—"],
+              ["Head of Class", (student as any).headTeacherName || "—"],
               ["Results on Record", `${results.length} entries`],
             ].map(([label, value]) => (
               <div key={label as string} className="flex justify-between border-b border-border pb-2 last:border-0">
