@@ -31,7 +31,6 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
     { id: "announcements", label: "Announcements", icon: Megaphone },
     { id: "timetable", label: "Timetable", icon: Clock },
     { id: "messaging", label: "Messages", icon: MessageCircle },
-    { id: "groups", label: "Group Messaging", icon: UserPlus },
   ];
 
   const teacherTabs = [
@@ -74,7 +73,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
             </div>
           </div>
 
-          <nav className="flex-1 p-3 space-y-1">
+          <nav className="flex-1 overflow-y-auto p-3 space-y-1">
             {tabs.map((tab) => (
               <button
                 key={tab.id}

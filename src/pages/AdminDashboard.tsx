@@ -37,7 +37,6 @@ const AdminDashboard = () => {
       {activeTab === "announcements" && <AnnouncementsView />}
       {activeTab === "timetable" && <TimetableView />}
       {activeTab === "messaging" && <MessagingView />}
-      {activeTab === "groups" && <GroupMessagingView />}
     </DashboardLayout>
   );
 };
