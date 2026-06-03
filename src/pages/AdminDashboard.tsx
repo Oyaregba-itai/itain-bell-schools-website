@@ -2488,8 +2488,27 @@ const ViewAllResults = () => {
 
   const editScore = parseFloat(editing?.total_score) || 0;
 
+  // Group unique student+term pairs with both result types availability
+  const studentTermCards = Array.from(
+    new Map(
+      results.map((r: any) => [`${r.student_id}|${r.term_id}`, {
+        studentId: r.student_id, termId: r.term_id,
+        studentName: r.studentData ? `${r.studentData.first_name} ${r.studentData.last_name}`.trim() : "Student",
+        termName: r.termName,
+      }])
+    ).values()
+  );
+
+  // Check which result types exist per student+term
+  const resultTypeMap: Record<string, Set<string>> = {};
+  results.forEach((r: any) => {
+    const key = `${r.student_id}|${r.term_id}`;
+    if (!resultTypeMap[key]) resultTypeMap[key] = new Set();
+    if (r.result_type) resultTypeMap[key].add(r.result_type);
+  });
+
   return (
-    <div>
+    <div className="space-y-8">
       {reportCard && (
         <ReportCard studentId={reportCard.studentId} termId={reportCard.termId} resultType={reportCard.resultType} onClose={() => setReportCard(null)} />
       )}
@@ -2515,9 +2534,7 @@ const ViewAllResults = () => {
             <div>
               <Label>Score (out of 30)</Label>
               <Input type="number" step="0.5" min="0" max="30" value={editing.total_score} onChange={e => setEditing({ ...editing, total_score: e.target.value })} />
-              {editing.total_score && (
-                <p className="text-xs mt-1 font-semibold text-muted-foreground">Grade: {getGradeLetterAdmin(editScore)}</p>
-              )}
+              {editing.total_score && <p className="text-xs mt-1 font-semibold text-muted-foreground">Grade: {getGradeLetterAdmin(editScore)}</p>}
             </div>
             <div>
               <Label>Teacher Comment</Label>
@@ -2530,70 +2547,107 @@ const ViewAllResults = () => {
         </DialogContent>
       </Dialog>
 
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-        <h3 className="text-lg font-heading text-foreground">All Results</h3>
-        {studentTermPairs.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {studentTermPairs.map((pair: any) => (
-              <span key={`${pair.studentId}|${pair.termId}`} className="flex gap-1">
-                <button onClick={() => setReportCard({ ...pair, resultType: "mid_term" })} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium">
-                  <Printer size={12} /> {pair.studentName} (Mid)
-                </button>
-                <button onClick={() => setReportCard({ ...pair, resultType: "end_of_term" })} className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-secondary/10 text-secondary hover:bg-secondary/20 transition-colors font-medium">
-                  <Printer size={12} /> End Term
-                </button>
-              </span>
-            ))}
+      {/* ── Report Cards section ── */}
+      <div>
+        <div className="flex items-center gap-2 mb-4">
+          <Printer size={18} className="text-primary" />
+          <h3 className="text-lg font-heading text-foreground">Report Cards</h3>
+          <span className="text-xs text-muted-foreground ml-1">— click to preview or print</span>
+        </div>
+
+        {studentTermCards.length === 0 ? (
+          <div className="bg-card rounded-xl p-8 shadow-card text-center text-muted-foreground text-sm">
+            No results uploaded yet. Once teachers upload results, report cards will appear here.
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {studentTermCards.map((pair: any) => {
+              const key = `${pair.studentId}|${pair.termId}`;
+              const types = resultTypeMap[key] || new Set();
+              const initials = pair.studentName.split(" ").map((w: string) => w[0]).join("").substring(0, 2).toUpperCase();
+              return (
+                <div key={key} className="bg-card rounded-xl p-4 shadow-card border border-border">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-foreground truncate">{pair.studentName}</p>
+                      <p className="text-xs text-muted-foreground">{pair.termName}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setReportCard({ studentId: pair.studentId, termId: pair.termId, resultType: "mid_term" })}
+                      className={`flex-1 flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors border ${types.has("mid_term") ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/20" : "bg-muted text-muted-foreground border-border opacity-50"}`}
+                    >
+                      <Printer size={12} /> Mid Term
+                    </button>
+                    <button
+                      onClick={() => setReportCard({ studentId: pair.studentId, termId: pair.termId, resultType: "end_of_term" })}
+                      className={`flex-1 flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors border ${types.has("end_of_term") ? "bg-secondary/10 text-secondary border-secondary/30 hover:bg-secondary/20" : "bg-muted text-muted-foreground border-border opacity-50"}`}
+                    >
+                      <Printer size={12} /> End of Term
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
-      <div className="bg-card rounded-xl shadow-card overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="bg-muted">
-            <tr>
-              <th className="text-left p-3 font-medium text-muted-foreground">Student</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Subject</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Score /30</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Grade</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Type</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Term</th>
-              <th className="p-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {results.map((result: any) => (
-              <tr key={result.id} className="border-t border-border">
-                <td className="p-3 text-foreground">
-                  {result.studentData ? `${result.studentData.first_name} ${result.studentData.last_name}` : "—"}
-                </td>
-                <td className="p-3 text-muted-foreground">{result.subjectName}</td>
-                <td className="p-3 text-foreground font-semibold">{result.total_score ?? "—"}</td>
-                <td className="p-3">
-                  <span className={`px-2 py-1 rounded-md text-xs font-bold ${
-                    result.grade_letter?.startsWith("A") ? "bg-purple-100 text-purple-700"
-                    : result.grade_letter?.startsWith("B") ? "bg-green-100 text-green-700"
-                    : result.grade_letter?.startsWith("C") ? "bg-blue-100 text-blue-700"
-                    : result.grade_letter === "D" ? "bg-orange-100 text-orange-700"
-                    : "bg-red-100 text-red-700"
-                  }`}>
-                    {result.grade_letter || "—"}
-                  </span>
-                </td>
-                <td className="p-3 text-muted-foreground text-xs capitalize">{result.result_type?.replace("_", " ") || "—"}</td>
-                <td className="p-3 text-muted-foreground">{result.termName}</td>
-                <td className="p-3">
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => setEditing({ ...result })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button>
-                    <button onClick={() => { if (confirm("Delete this result?")) deleteResult.mutate(result.id); }} className="text-destructive hover:opacity-70 transition-opacity"><Trash2 size={14} /></button>
-                  </div>
-                </td>
+
+      {/* ── Detailed results table ── */}
+      <div>
+        <h3 className="text-lg font-heading text-foreground mb-4">All Results</h3>
+        <div className="bg-card rounded-xl shadow-card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted">
+              <tr>
+                <th className="text-left p-3 font-medium text-muted-foreground">Student</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Subject</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Score /30</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Grade</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Type</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Term</th>
+                <th className="p-3" />
               </tr>
-            ))}
-            {!results.length && (
-              <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No results yet.</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {results.map((result: any) => (
+                <tr key={result.id} className="border-t border-border">
+                  <td className="p-3 text-foreground">
+                    {result.studentData ? `${result.studentData.first_name} ${result.studentData.last_name}` : "—"}
+                  </td>
+                  <td className="p-3 text-muted-foreground">{result.subjectName}</td>
+                  <td className="p-3 text-foreground font-semibold">{result.total_score ?? "—"}</td>
+                  <td className="p-3">
+                    <span className={`px-2 py-1 rounded-md text-xs font-bold ${
+                      result.grade_letter?.startsWith("A") ? "bg-purple-100 text-purple-700"
+                      : result.grade_letter?.startsWith("B") ? "bg-green-100 text-green-700"
+                      : result.grade_letter?.startsWith("C") ? "bg-blue-100 text-blue-700"
+                      : result.grade_letter === "D" ? "bg-orange-100 text-orange-700"
+                      : "bg-red-100 text-red-700"
+                    }`}>
+                      {result.grade_letter || "—"}
+                    </span>
+                  </td>
+                  <td className="p-3 text-muted-foreground text-xs capitalize">{result.result_type?.replace("_", " ") || "—"}</td>
+                  <td className="p-3 text-muted-foreground">{result.termName}</td>
+                  <td className="p-3">
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => setEditing({ ...result })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button>
+                      <button onClick={() => { if (confirm("Delete this result?")) deleteResult.mutate(result.id); }} className="text-destructive hover:opacity-70 transition-opacity"><Trash2 size={14} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!results.length && (
+                <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No results yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
