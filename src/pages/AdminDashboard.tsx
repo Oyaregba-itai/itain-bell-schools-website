@@ -1917,6 +1917,15 @@ const ManageEvents = () => {
     start_date: "", end_date: "", start_time: "", end_time: "", location: "", is_public: true,
   });
   const [editing, setEditing] = useState<any | null>(null);
+  const [newFlyerFile, setNewFlyerFile] = useState<File | null>(null);
+  const [editFlyerFile, setEditFlyerFile] = useState<File | null>(null);
+
+  const uploadFlyer = async (file: File): Promise<string> => {
+    const path = `events/flyer-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, "_")}`;
+    const { error } = await supabase.storage.from("profile-pictures").upload(path, file, { upsert: true });
+    if (error) throw error;
+    return supabase.storage.from("profile-pictures").getPublicUrl(path).data.publicUrl;
+  };
 
   const { data: events } = useQuery({
     queryKey: ["all-events"],
@@ -1929,20 +1938,25 @@ const ManageEvents = () => {
 
   const addEvent = useMutation({
     mutationFn: async () => {
+      let flyer_url: string | null = null;
+      if (newFlyerFile) flyer_url = await uploadFlyer(newFlyerFile);
       const { data: userData } = await supabase.auth.getUser();
-      const { error } = await supabase.from("events").insert([{ ...newEvent, created_by: userData.user?.id }]);
+      const { error } = await supabase.from("events").insert([{ ...newEvent, flyer_url, created_by: userData.user?.id }]);
       if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Event created successfully" });
       queryClient.invalidateQueries({ queryKey: ["all-events"] });
       setNewEvent({ title: "", description: "", event_type: "school_event", start_date: "", end_date: "", start_time: "", end_time: "", location: "", is_public: true });
+      setNewFlyerFile(null);
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const updateEvent = useMutation({
     mutationFn: async () => {
+      let flyer_url = editing.flyer_url || null;
+      if (editFlyerFile) flyer_url = await uploadFlyer(editFlyerFile);
       const { error } = await supabase.from("events").update({
         title: editing.title,
         description: editing.description || null,
@@ -1953,6 +1967,7 @@ const ManageEvents = () => {
         end_time: editing.end_time || null,
         location: editing.location || null,
         is_public: editing.is_public,
+        flyer_url,
       }).eq("id", editing.id);
       if (error) throw error;
     },
@@ -1960,6 +1975,7 @@ const ManageEvents = () => {
       toast({ title: "Event updated" });
       queryClient.invalidateQueries({ queryKey: ["all-events"] });
       setEditing(null);
+      setEditFlyerFile(null);
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -1976,11 +1992,27 @@ const ManageEvents = () => {
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
-  const EventFormFields = ({ state, setState }: { state: any; setState: (v: any) => void }) => (
+  const EventFormFields = ({ state, setState, flyerFile, onFlyerChange }: {
+    state: any; setState: (v: any) => void;
+    flyerFile?: File | null; onFlyerChange?: (f: File | null) => void;
+  }) => {
+    const previewUrl = flyerFile ? URL.createObjectURL(flyerFile) : null;
+    return (
     <div className="space-y-4">
       <div>
         <Label>Event Title</Label>
         <Input value={state.title} onChange={(e) => setState({ ...state, title: e.target.value })} placeholder="e.g. Sports Day" />
+      </div>
+      <div>
+        <Label>Event Flyer / Photo (optional)</Label>
+        {(previewUrl || state.flyer_url) && (
+          <div className="mt-1 mb-2 relative">
+            <img src={previewUrl || state.flyer_url} alt="Flyer preview" className="w-full h-40 object-cover rounded-lg border border-border" />
+            {previewUrl && <span className="absolute top-1 left-1 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full">New</span>}
+          </div>
+        )}
+        <Input type="file" accept="image/*,application/pdf" className="text-sm" onChange={e => onFlyerChange?.(e.target.files?.[0] || null)} />
+        <p className="text-xs text-muted-foreground mt-1">Accepts images (JPG, PNG) or PDF flyers</p>
       </div>
       <div>
         <Label>Description</Label>
@@ -2009,7 +2041,8 @@ const ManageEvents = () => {
         <Label htmlFor="event-public" className="cursor-pointer">Visible to all users</Label>
       </div>
     </div>
-  );
+    );
+  };
 
   return (
     <div>
@@ -2021,7 +2054,7 @@ const ManageEvents = () => {
           </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>Add New Event</DialogTitle></DialogHeader>
-            <EventFormFields state={newEvent} setState={setNewEvent} />
+            <EventFormFields state={newEvent} setState={setNewEvent} flyerFile={newFlyerFile} onFlyerChange={setNewFlyerFile} />
             <Button onClick={() => addEvent.mutate()} className="w-full hero-gradient mt-2" disabled={addEvent.isPending || !newEvent.title}>
               {addEvent.isPending ? "Creating..." : "Create Event"}
             </Button>
@@ -2033,7 +2066,7 @@ const ManageEvents = () => {
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Edit Event</DialogTitle></DialogHeader>
           {editing && <>
-            <EventFormFields state={editing} setState={setEditing} />
+            <EventFormFields state={editing} setState={setEditing} flyerFile={editFlyerFile} onFlyerChange={setEditFlyerFile} />
             <Button className="w-full hero-gradient mt-2" onClick={() => updateEvent.mutate()} disabled={updateEvent.isPending || !editing.title}>
               {updateEvent.isPending ? "Saving..." : "Save Changes"}
             </Button>

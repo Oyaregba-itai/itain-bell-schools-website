@@ -64,42 +64,51 @@ const EventsView = () => {
           const style = TYPE_STYLES[event.event_type] || TYPE_STYLES.other;
           const label = TYPE_LABELS[event.event_type] || "Event";
           return (
-            <div key={event.id} className="bg-card rounded-xl p-5 shadow-card border border-border">
-              <div className="flex items-start justify-between gap-2 mb-3">
-                <h4 className="font-medium text-foreground leading-snug">{event.title}</h4>
-                <span className={`shrink-0 text-xs font-semibold px-2 py-1 rounded-full border ${style}`}>
-                  {label}
-                </span>
-              </div>
-              {event.description && (
-                <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{event.description}</p>
+            <div key={event.id} className="bg-card rounded-xl shadow-card border border-border overflow-hidden flex flex-col">
+              {event.flyer_url && (
+                <img
+                  src={event.flyer_url}
+                  alt={event.title}
+                  className="w-full h-52 object-cover"
+                />
               )}
-              <div className="space-y-1.5 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <Calendar size={13} />
-                  <span>
-                    {new Date(event.start_date + "T00:00:00").toLocaleDateString("en-GB", {
-                      day: "numeric", month: "short", year: "numeric",
-                    })}
-                    {event.end_date && event.end_date !== event.start_date &&
-                      ` – ${new Date(event.end_date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`}
+              <div className="p-5 flex flex-col flex-1">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <h4 className="font-medium text-foreground leading-snug">{event.title}</h4>
+                  <span className={`shrink-0 text-xs font-semibold px-2 py-1 rounded-full border ${style}`}>
+                    {label}
                   </span>
                 </div>
-                {event.start_time && (
+                {event.description && (
+                  <p className="text-sm text-muted-foreground mb-3">{event.description}</p>
+                )}
+                <div className="space-y-1.5 text-xs text-muted-foreground mt-auto">
                   <div className="flex items-center gap-2">
-                    <Clock size={13} />
+                    <Calendar size={13} />
                     <span>
-                      {event.start_time}
-                      {event.end_time ? ` – ${event.end_time}` : ""}
+                      {new Date(event.start_date + "T00:00:00").toLocaleDateString("en-GB", {
+                        day: "numeric", month: "short", year: "numeric",
+                      })}
+                      {event.end_date && event.end_date !== event.start_date &&
+                        ` – ${new Date(event.end_date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`}
                     </span>
                   </div>
-                )}
-                {event.location && (
-                  <div className="flex items-center gap-2">
-                    <MapPin size={13} />
-                    <span>{event.location}</span>
-                  </div>
-                )}
+                  {event.start_time && (
+                    <div className="flex items-center gap-2">
+                      <Clock size={13} />
+                      <span>
+                        {event.start_time}
+                        {event.end_time ? ` – ${event.end_time}` : ""}
+                      </span>
+                    </div>
+                  )}
+                  {event.location && (
+                    <div className="flex items-center gap-2">
+                      <MapPin size={13} />
+                      <span>{event.location}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
