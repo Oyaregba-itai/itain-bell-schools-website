@@ -1057,7 +1057,15 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
               {(student as any).admission_number && <span className="bg-primary/10 text-primary text-xs px-2.5 py-1 rounded-full font-medium">{(student as any).admission_number}</span>}
               {(student as any).gender && <span className="bg-muted text-xs px-2.5 py-1 rounded-full capitalize">{(student as any).gender}</span>}
               {age && <span className="bg-muted text-xs px-2.5 py-1 rounded-full">{age}</span>}
-              {(student as any).school_section && <span className="bg-secondary/10 text-secondary text-xs px-2.5 py-1 rounded-full capitalize">{(student as any).school_section}</span>}
+              {(student as any).school_section === "creche" && (
+                <span className="bg-orange-100 text-orange-700 text-xs px-2.5 py-1 rounded-full font-medium">Crèche — No report card</span>
+              )}
+              {(student as any).school_section === "nursery" && (
+                <span className="bg-blue-100 text-blue-700 text-xs px-2.5 py-1 rounded-full font-medium">Early Years</span>
+              )}
+              {(student as any).school_section === "primary" && (
+                <span className="bg-secondary/10 text-secondary text-xs px-2.5 py-1 rounded-full font-medium">Key Stage</span>
+              )}
             </div>
           </div>
         </div>
@@ -1128,8 +1136,14 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
         }
       </div>
 
-      {/* Subjects & Teachers */}
-      <div className="bg-card rounded-xl p-5 shadow-card">
+      {(student as any).school_section === "creche" && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-5 text-sm text-orange-700">
+          <strong>Crèche student</strong> — No subjects, no report card. Academic profiling begins in Early Years.
+        </div>
+      )}
+
+      {/* Subjects & Teachers — hidden for creche */}
+      {(student as any).school_section !== "creche" && <div className="bg-card rounded-xl p-5 shadow-card">
         <h4 className="font-heading text-foreground font-semibold mb-4">Subjects & Teachers</h4>
         {classSubjects.length > 0 ? (
           <div className="grid sm:grid-cols-2 gap-2">
@@ -1146,10 +1160,10 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
         ) : (
           <p className="text-sm text-muted-foreground">No subjects assigned to this class yet.</p>
         )}
-      </div>
+      </div>}
 
-      {/* Recent results */}
-      {results.length > 0 && (
+      {/* Recent results — hidden for creche */}
+      {(student as any).school_section !== "creche" && results.length > 0 && (
         <div className="bg-card rounded-xl p-5 shadow-card">
           <h4 className="font-heading text-foreground font-semibold mb-4">Results</h4>
           <div className="overflow-x-auto">
@@ -1282,10 +1296,14 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
 };
 
 const SUBJECT_NAMES = [
+  // Key Stage (Year 1–6)
   "Mathematics", "English Language", "Science", "Humanities", "Yoruba",
   "Creative Art", "CRK", "Computing", "Vocational Education", "French",
   "Global Perspectives", "Verbal Reasoning", "STEAM", "Diction",
   "Quantitative Reasoning", "Life Skills", "Music", "PHE",
+  // Early Years
+  "Numeracy", "Literacy", "Cultural", "Practical Life", "Sensorial",
+  "Physical Body Movement", "Art and Craft",
 ];
 
 const ManageSubjects = () => {
