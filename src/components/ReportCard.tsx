@@ -8,7 +8,8 @@ interface ReportCardProps {
   studentId: string;
   termId: string;
   resultType: "mid_term" | "end_of_term";
-  onClose: () => void;
+  onClose?: () => void;
+  inline?: boolean;
 }
 
 const GRADE_SCALE = [
@@ -25,7 +26,7 @@ const GRADE_SCALE = [
 const getGradeInfo = (score: number) =>
   GRADE_SCALE.find((g) => score >= g.min && score <= g.max) || GRADE_SCALE[GRADE_SCALE.length - 1];
 
-const ReportCard = ({ studentId, termId, resultType, onClose }: ReportCardProps) => {
+const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCardProps) => {
   const { data, isLoading } = useQuery({
     queryKey: ["report-card", studentId, termId, resultType],
     queryFn: async () => {
@@ -215,7 +216,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose }: ReportCardProps)
   };
 
   if (isLoading) return (
-    <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+    <div className={inline ? "flex items-center justify-center py-20" : "fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center"}>
       <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
     </div>
   );
@@ -232,23 +233,21 @@ const ReportCard = ({ studentId, termId, resultType, onClose }: ReportCardProps)
   const dob = student.date_of_birth;
   const age = dob ? `${new Date().getFullYear() - new Date(dob).getFullYear()} yrs` : "—";
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center overflow-y-auto py-6 px-4">
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden">
-
-        {/* Modal toolbar */}
-        <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
-          <div>
-            <p className="font-semibold text-gray-800">{studentName}</p>
-            <p className="text-xs text-gray-500">{(term as any)?.name} · {reportLabel} Report Card · {(term as any)?.academic_year}</p>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={handlePrint} className="hero-gradient gap-2 text-sm">
-              <Printer size={15} /> Print / Download PDF
-            </Button>
-            <Button variant="outline" size="icon" onClick={onClose}><X size={16} /></Button>
-          </div>
+  const cardContent = (
+    <>
+      {/* Toolbar */}
+      <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
+        <div>
+          <p className="font-semibold text-gray-800">{studentName}</p>
+          <p className="text-xs text-gray-500">{(term as any)?.name} · {reportLabel} Report Card · {(term as any)?.academic_year}</p>
         </div>
+        <div className="flex gap-2">
+          <Button onClick={handlePrint} className="hero-gradient gap-2 text-sm">
+            <Printer size={15} /> Print / Download PDF
+          </Button>
+          {!inline && onClose && <Button variant="outline" size="icon" onClick={onClose}><X size={16} /></Button>}
+        </div>
+      </div>
 
         {/* Report card preview — styled to match PDF */}
         <div className="p-5 space-y-0 text-[11px] font-sans text-gray-900" style={{ fontFamily: "Arial, sans-serif" }}>
@@ -408,7 +407,16 @@ const ReportCard = ({ studentId, termId, resultType, onClose }: ReportCardProps)
           </div>
 
         </div>
-      </div>
+    </>
+  );
+
+  if (inline) {
+    return <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">{cardContent}</div>;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center overflow-y-auto py-6 px-4">
+      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden">{cardContent}</div>
     </div>
   );
 };

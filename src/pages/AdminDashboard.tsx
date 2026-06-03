@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -2404,6 +2404,138 @@ const getGradeLetterAdmin = (score: number): string => {
   return "E";
 };
 
+const LiveReportCardPreview = ({
+  studentsWithResults, termsWithResults, allResults, onEditResult, onResultSaved,
+}: {
+  studentsWithResults: { id: string; name: string }[];
+  termsWithResults: { id: string; name: string }[];
+  allResults: any[];
+  onEditResult: (result: any) => void;
+  onResultSaved: () => void;
+}) => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [selStudent, setSelStudent] = useState("");
+  const [selTerm, setSelTerm] = useState("");
+  const [selType, setSelType] = useState<"mid_term" | "end_of_term">("mid_term");
+
+  const previewReady = !!(selStudent && selTerm);
+
+  // Results for the selected student+term+type (for the edit panel)
+  const filteredResults = allResults.filter((r: any) =>
+    r.student_id === selStudent && r.term_id === selTerm && r.result_type === selType
+  );
+
+  const updateResult = useMutation({
+    mutationFn: async (row: any) => {
+      const score = parseFloat(row.total_score) || 0;
+      const { error } = await supabase.from("results").update({
+        total_score: score,
+        grade_letter: getGradeLetterAdmin(score),
+        teacher_comments: row.teacher_comments || null,
+      }).eq("id", row.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Result updated — report card refreshed" });
+      queryClient.invalidateQueries({ queryKey: ["all-results-admin"] });
+      queryClient.invalidateQueries({ queryKey: ["report-card", selStudent, selTerm, selType] });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const [editRows, setEditRows] = useState<any[]>([]);
+  useEffect(() => { setEditRows(filteredResults.map(r => ({ ...r }))); }, [selStudent, selTerm, selType, allResults.length]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Printer size={18} className="text-primary" />
+        <h3 className="text-lg font-heading text-foreground">Report Card Preview</h3>
+      </div>
+
+      {/* Selectors */}
+      <div className="bg-card rounded-xl p-4 shadow-card flex flex-wrap gap-3 items-end">
+        <div className="flex-1 min-w-[180px]">
+          <Label className="text-xs mb-1 block">Student</Label>
+          <Select value={selStudent} onValueChange={setSelStudent}>
+            <SelectTrigger><SelectValue placeholder="Select student..." /></SelectTrigger>
+            <SelectContent>
+              {studentsWithResults.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex-1 min-w-[160px]">
+          <Label className="text-xs mb-1 block">Term</Label>
+          <Select value={selTerm} onValueChange={setSelTerm}>
+            <SelectTrigger><SelectValue placeholder="Select term..." /></SelectTrigger>
+            <SelectContent>
+              {termsWithResults.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex gap-1 bg-muted rounded-lg p-1">
+          {(["mid_term", "end_of_term"] as const).map(t => (
+            <button key={t} onClick={() => setSelType(t)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${selType === t ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              {t === "mid_term" ? "Mid Term" : "End of Term"}
+            </button>
+          ))}
+        </div>
+        {!previewReady && <p className="text-xs text-muted-foreground w-full">Select a student and term to preview their report card.</p>}
+      </div>
+
+      {previewReady && (
+        <div className="grid lg:grid-cols-5 gap-6">
+          {/* Report card preview (inline) */}
+          <div className="lg:col-span-3 overflow-auto max-h-[700px] border border-border rounded-xl">
+            <ReportCard key={`${selStudent}-${selTerm}-${selType}-${allResults.length}`} studentId={selStudent} termId={selTerm} resultType={selType} inline />
+          </div>
+
+          {/* Edit panel */}
+          <div className="lg:col-span-2 bg-card rounded-xl p-4 shadow-card space-y-3">
+            <h4 className="font-heading font-semibold text-foreground text-sm">
+              Edit {selType === "mid_term" ? "Mid Term" : "End of Term"} Scores
+            </h4>
+            <p className="text-xs text-muted-foreground">Changes save instantly and update the preview.</p>
+            {editRows.length === 0 && (
+              <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-3">No results uploaded for this student / term / type yet.</p>
+            )}
+            <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+              {editRows.map((row, i) => (
+                <div key={row.id} className="border border-border rounded-lg p-3 space-y-2">
+                  <p className="text-xs font-medium text-foreground">{row.subjectName}</p>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      type="number" step="0.5" min="0" max="30"
+                      value={row.total_score ?? ""}
+                      onChange={e => { const next = [...editRows]; next[i] = { ...next[i], total_score: e.target.value }; setEditRows(next); }}
+                      className="h-8 text-sm w-24"
+                      placeholder="Score /30"
+                    />
+                    <span className="text-xs font-bold" style={{ color: row.total_score ? { A: "#7B2D8B", B: "#166534", C: "#1e40af", D: "#c2410c", E: "#b91c1c" }[getGradeLetterAdmin(parseFloat(row.total_score) || 0)[0]] || "#111" : "#999" }}>
+                      {row.total_score ? getGradeLetterAdmin(parseFloat(row.total_score) || 0) : "—"}
+                    </span>
+                    <Button size="sm" className="h-8 text-xs hero-gradient ml-auto" onClick={() => updateResult.mutate(row)} disabled={updateResult.isPending}>
+                      Save
+                    </Button>
+                  </div>
+                  <Input
+                    value={row.teacher_comments || ""}
+                    onChange={e => { const next = [...editRows]; next[i] = { ...next[i], teacher_comments: e.target.value }; setEditRows(next); }}
+                    className="h-7 text-xs"
+                    placeholder="Teacher comment..."
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ViewAllResults = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -2488,24 +2620,14 @@ const ViewAllResults = () => {
 
   const editScore = parseFloat(editing?.total_score) || 0;
 
-  // Group unique student+term pairs with both result types availability
-  const studentTermCards = Array.from(
-    new Map(
-      results.map((r: any) => [`${r.student_id}|${r.term_id}`, {
-        studentId: r.student_id, termId: r.term_id,
-        studentName: r.studentData ? `${r.studentData.first_name} ${r.studentData.last_name}`.trim() : "Student",
-        termName: r.termName,
-      }])
-    ).values()
-  );
+  // Unique students and terms with results
+  const studentsWithResults = Array.from(new Map(results.map((r: any) => [r.student_id, r.studentData])).entries())
+    .filter(([, s]) => s)
+    .map(([id, s]) => ({ id, name: `${s.first_name} ${s.last_name}`.trim() }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
-  // Check which result types exist per student+term
-  const resultTypeMap: Record<string, Set<string>> = {};
-  results.forEach((r: any) => {
-    const key = `${r.student_id}|${r.term_id}`;
-    if (!resultTypeMap[key]) resultTypeMap[key] = new Set();
-    if (r.result_type) resultTypeMap[key].add(r.result_type);
-  });
+  const termsWithResults = Array.from(new Map(results.map((r: any) => [r.term_id, r.termName])).entries())
+    .map(([id, name]) => ({ id, name }));
 
   return (
     <div className="space-y-8">
@@ -2547,55 +2669,14 @@ const ViewAllResults = () => {
         </DialogContent>
       </Dialog>
 
-      {/* ── Report Cards section ── */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <Printer size={18} className="text-primary" />
-          <h3 className="text-lg font-heading text-foreground">Report Cards</h3>
-          <span className="text-xs text-muted-foreground ml-1">— click to preview or print</span>
-        </div>
-
-        {studentTermCards.length === 0 ? (
-          <div className="bg-card rounded-xl p-8 shadow-card text-center text-muted-foreground text-sm">
-            No results uploaded yet. Once teachers upload results, report cards will appear here.
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {studentTermCards.map((pair: any) => {
-              const key = `${pair.studentId}|${pair.termId}`;
-              const types = resultTypeMap[key] || new Set();
-              const initials = pair.studentName.split(" ").map((w: string) => w[0]).join("").substring(0, 2).toUpperCase();
-              return (
-                <div key={key} className="bg-card rounded-xl p-4 shadow-card border border-border">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
-                      {initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-foreground truncate">{pair.studentName}</p>
-                      <p className="text-xs text-muted-foreground">{pair.termName}</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setReportCard({ studentId: pair.studentId, termId: pair.termId, resultType: "mid_term" })}
-                      className={`flex-1 flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors border ${types.has("mid_term") ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/20" : "bg-muted text-muted-foreground border-border opacity-50"}`}
-                    >
-                      <Printer size={12} /> Mid Term
-                    </button>
-                    <button
-                      onClick={() => setReportCard({ studentId: pair.studentId, termId: pair.termId, resultType: "end_of_term" })}
-                      className={`flex-1 flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg font-medium transition-colors border ${types.has("end_of_term") ? "bg-secondary/10 text-secondary border-secondary/30 hover:bg-secondary/20" : "bg-muted text-muted-foreground border-border opacity-50"}`}
-                    >
-                      <Printer size={12} /> End of Term
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {/* ── Live Report Card Preview ── */}
+      <LiveReportCardPreview
+        studentsWithResults={studentsWithResults}
+        termsWithResults={termsWithResults}
+        allResults={results}
+        onEditResult={setEditing}
+        onResultSaved={() => queryClient.invalidateQueries({ queryKey: ["all-results-admin"] })}
+      />
 
       {/* ── Detailed results table ── */}
       <div>
