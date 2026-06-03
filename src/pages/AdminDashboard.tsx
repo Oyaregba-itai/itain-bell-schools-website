@@ -90,7 +90,84 @@ const generatePassword = () => {
   return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
 };
 
+const TeacherProfile = ({ user, onBack }: { user: any; onBack: () => void }) => {
+  const { data: subjects } = useQuery({
+    queryKey: ["teacher-subjects-profile", user.user_id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("subjects").select("*").eq("teacher_id", user.user_id).order("name");
+      if (error) throw error;
+      const rows = data || [];
+      const classIds = [...new Set(rows.map((s: any) => s.class_id).filter(Boolean))];
+      let classMap: Record<string, string> = {};
+      if (classIds.length > 0) {
+        const { data: classes } = await supabase.from("classes").select("id, name").in("id", classIds as string[]);
+        (classes || []).forEach((c: any) => { classMap[c.id] = c.name; });
+      }
+      return rows.map((s: any) => ({ ...s, className: classMap[s.class_id] || "—" }));
+    },
+    enabled: !!user.user_id,
+  });
+
+  const grouped = (subjects || []).reduce((acc: any, s: any) => {
+    if (!acc[s.name]) acc[s.name] = [];
+    acc[s.name].push(s.className);
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-6">
+      <button onClick={onBack} className="flex items-center gap-2 text-muted-foreground hover:text-foreground text-sm transition-colors">
+        <ChevronLeft size={18} /> Back to Users
+      </button>
+
+      <div className="bg-card rounded-xl p-6 shadow-card flex items-center gap-5">
+        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl flex-shrink-0">
+          {(user.full_name?.[0] || "?").toUpperCase()}
+        </div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-xl font-heading text-foreground">{user.full_name}</h2>
+            {user.staff_type === "adjunct" && (
+              <span className="text-xs bg-amber-100 text-amber-700 px-2.5 py-0.5 rounded-full font-medium">Adjunct Teacher</span>
+            )}
+            <span className="text-xs bg-accent/20 text-accent-foreground px-2.5 py-0.5 rounded-full capitalize font-medium">{user.role}</span>
+          </div>
+          <p className="text-muted-foreground text-sm mt-0.5">{user.email}</p>
+          {user.phone && <p className="text-muted-foreground text-sm">{user.phone}</p>}
+        </div>
+      </div>
+
+      <div className="bg-card rounded-xl p-5 shadow-card">
+        <h4 className="font-heading font-semibold text-foreground mb-4">
+          Subjects Teaching ({subjects?.length || 0} assignments)
+        </h4>
+        {Object.keys(grouped).length > 0 ? (
+          <div className="space-y-3">
+            {Object.entries(grouped).map(([subjectName, classes]: [string, any]) => (
+              <div key={subjectName} className="flex items-start gap-3 p-3 rounded-lg bg-muted/40">
+                <BookOpen size={15} className="text-primary mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">{subjectName}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{classes.join(", ")}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No subjects assigned yet.</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const ManageUsers = () => {
+  const [viewing, setViewing] = useState<any | null>(null);
+  if (viewing) return <TeacherProfile user={viewing} onBack={() => setViewing(null)} />;
+  return <UserList onView={setViewing} />;
+};
+
+const UserList = ({ onView }: { onView: (user: any) => void }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -106,7 +183,7 @@ const ManageUsers = () => {
     queryFn: async () => {
       const { data: profiles, error: profileError } = await supabase
         .from("profiles")
-        .select("id, user_id, full_name, email, created_at");
+        .select("id, user_id, full_name, email, phone, staff_type, created_at");
       if (profileError) throw profileError;
 
       const { data: roles, error: roleError } = await supabase
@@ -121,6 +198,8 @@ const ManageUsers = () => {
           user_id: profile.user_id,
           full_name: profile.full_name,
           email: profile.email || "",
+          phone: profile.phone || "",
+          staff_type: profile.staff_type || "full_time",
           role: userRole?.role || "parent",
           created_at: profile.created_at,
         };
@@ -377,12 +456,20 @@ const ManageUsers = () => {
               <th className="text-left p-3 font-medium text-muted-foreground">Role</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Joined</th>
               <th className="p-3" />
+              <th className="p-3" />
             </tr>
           </thead>
           <tbody>
             {users?.map((user: any) => (
               <tr key={user.id} className="border-t border-border">
-                <td className="p-3 text-foreground">{user.full_name}</td>
+                <td className="p-3 text-foreground">
+                  <div className="flex items-center gap-2">
+                    {user.full_name}
+                    {user.staff_type === "adjunct" && (
+                      <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">Adjunct</span>
+                    )}
+                  </div>
+                </td>
                 <td className="p-3 text-muted-foreground">{user.email || "—"}</td>
                 <td className="p-3">
                   <span className="px-2 py-1 rounded-md text-xs font-semibold bg-accent/20 text-accent-foreground capitalize">
@@ -390,6 +477,13 @@ const ManageUsers = () => {
                   </span>
                 </td>
                 <td className="p-3 text-muted-foreground">{new Date(user.created_at).toLocaleDateString()}</td>
+                <td className="p-3">
+                  {user.role === "teacher" && (
+                    <button onClick={() => onView(user)} className="text-xs text-primary hover:underline font-medium flex items-center gap-1">
+                      Profile <ChevronRight size={13} />
+                    </button>
+                  )}
+                </td>
                 <td className="p-3">
                   <button onClick={() => setEditing({ ...user })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button>
                 </td>
