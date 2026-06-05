@@ -352,6 +352,7 @@ const ManageUsers = () => {
 };
 
 const UserList = ({ onView }: { onView: (user: any) => void }) => {
+  const { user: currentUser } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -469,6 +470,24 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
       toast({ title: "User updated" });
       queryClient.invalidateQueries({ queryKey: ["all-users"] });
       setEditing(null);
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteUser = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || "Failed to delete user");
+    },
+    onSuccess: () => {
+      toast({ title: "User deleted successfully" });
+      queryClient.invalidateQueries({ queryKey: ["all-users"] });
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -641,6 +660,7 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
               <th className="text-left p-3 font-medium text-muted-foreground">Joined</th>
               <th className="p-3" />
               <th className="p-3" />
+              <th className="p-3" />
             </tr>
           </thead>
           <tbody>
@@ -670,6 +690,20 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
                 </td>
                 <td className="p-3">
                   <button onClick={() => setEditing({ ...user })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button>
+                </td>
+                <td className="p-3">
+                  {user.user_id !== currentUser?.id && (
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete ${user.full_name}? This cannot be undone.`))
+                          deleteUser.mutate(user.user_id);
+                      }}
+                      disabled={deleteUser.isPending}
+                      className="text-destructive hover:opacity-70 transition-opacity"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
