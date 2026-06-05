@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { User, Mail, Lock, Upload, Eye, EyeOff, Sun, Moon, Monitor, Bell, BellOff, Shield, Settings, Palette, Phone } from "lucide-react";
+import { User, Mail, Lock, Upload, Eye, EyeOff, Sun, Moon, Monitor, Bell, BellOff, Shield, Palette, Phone, Plus, Trash2, CheckCircle } from "lucide-react";
 
 // ── Tiny helpers ─────────────────────────────────────────────────────────────
 
@@ -44,15 +45,9 @@ const applyTheme = (theme: Theme) => {
 
 const getSavedTheme = (): Theme => (localStorage.getItem("ibs-theme") as Theme) || "light";
 
-// ── Notification prefs (localStorage) ────────────────────────────────────────
-
+// ── Notification types ────────────────────────────────────────────────────────
 const NOTIF_KEYS = ["announcements", "messages", "results", "events"] as const;
 type NotifKey = typeof NOTIF_KEYS[number];
-const getNotifPrefs = () => {
-  try { return JSON.parse(localStorage.getItem("ibs-notifs") || "{}"); } catch { return {}; }
-};
-const saveNotifPrefs = (prefs: Record<string, boolean>) =>
-  localStorage.setItem("ibs-notifs", JSON.stringify(prefs));
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -300,52 +295,142 @@ const AppearanceTab = () => {
 
 // ── Notifications tab ─────────────────────────────────────────────────────────
 
-const NOTIF_OPTIONS: { key: NotifKey; label: string; desc: string; icon: any }[] = [
-  { key: "announcements", label: "Announcements",     desc: "New school announcements posted",        icon: Bell },
-  { key: "messages",      label: "New Messages",      desc: "When you receive a direct message",      icon: Bell },
-  { key: "results",       label: "Results Published",  desc: "When your results are made available",   icon: Bell },
-  { key: "events",        label: "Upcoming Events",    desc: "Reminders for school events",            icon: Bell },
+const NOTIF_OPTIONS: { key: NotifKey; label: string; desc: string }[] = [
+  { key: "announcements", label: "Announcements",    desc: "New school announcements" },
+  { key: "messages",      label: "New Messages",     desc: "When you receive a direct message" },
+  { key: "results",       label: "Results Published", desc: "When your report card is approved" },
+  { key: "events",        label: "School Events",    desc: "New events and reminders" },
 ];
 
 const NotificationsTab = () => {
+  const { user } = useAuth();
   const { toast } = useToast();
-  const [prefs, setPrefs] = useState<Record<string, boolean>>(getNotifPrefs());
+  const queryClient = useQueryClient();
+  const [newEmail, setNewEmail] = useState("");
 
-  const toggle = (key: NotifKey) => {
-    const next = { ...prefs, [key]: !prefs[key] };
-    setPrefs(next);
-    saveNotifPrefs(next);
-    toast({ title: `${next[key] ? "Enabled" : "Disabled"} ${key} notifications` });
+  const { data: notifData } = useQuery({
+    queryKey: ["notif-prefs", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data } = await supabase.from("profiles")
+        .select("notification_emails, notification_settings")
+        .eq("user_id", user.id).single();
+      return {
+        emails: (data?.notification_emails as string[]) || [],
+        settings: (data?.notification_settings as Record<string, boolean>) || {},
+      };
+    },
+    enabled: !!user,
+  });
+
+  const saveSettings = useMutation({
+    mutationFn: async (update: { emails?: string[]; settings?: Record<string, boolean> }) => {
+      const patch: any = {};
+      if (update.emails !== undefined) patch.notification_emails = update.emails;
+      if (update.settings !== undefined) patch.notification_settings = update.settings;
+      const { error } = await supabase.from("profiles").update(patch).eq("user_id", user!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notif-prefs", user?.id] }),
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const emails = notifData?.emails || [];
+  const settings = notifData?.settings || {};
+
+  const toggleType = (key: NotifKey) => {
+    const next = { ...settings, [key]: !settings[key] };
+    saveSettings.mutate({ settings: next });
+    toast({ title: `${!settings[key] ? "Enabled" : "Disabled"} ${key} email notifications` });
+  };
+
+  const addEmail = () => {
+    const trimmed = newEmail.trim().toLowerCase();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      return toast({ title: "Please enter a valid email address", variant: "destructive" } as any);
+    }
+    if (emails.includes(trimmed)) {
+      return toast({ title: "That email is already added", variant: "destructive" } as any);
+    }
+    saveSettings.mutate({ emails: [...emails, trimmed] });
+    setNewEmail("");
+    toast({ title: "Email added — notifications will be sent there" });
+  };
+
+  const removeEmail = (email: string) => {
+    saveSettings.mutate({ emails: emails.filter(e => e !== email) });
+    toast({ title: "Email removed" });
   };
 
   return (
     <div className="space-y-6">
-      <div className="bg-card rounded-xl p-6 shadow-card space-y-5">
+
+      {/* Notification email addresses */}
+      <div className="bg-card rounded-xl p-6 shadow-card space-y-4">
         <div>
-          <h3 className="font-heading font-semibold text-foreground">Notification Preferences</h3>
-          <p className="text-sm text-muted-foreground mt-1">Choose which alerts you'd like to receive in-app.</p>
+          <h3 className="font-heading font-semibold text-foreground">Notification Emails</h3>
+          <p className="text-sm text-muted-foreground mt-1">Add your Gmail or any personal email to receive school notifications there.</p>
         </div>
-        <div className="space-y-4">
+
+        {/* Existing emails */}
+        {emails.length > 0 && (
+          <div className="space-y-2">
+            {emails.map(email => (
+              <div key={email} className="flex items-center justify-between gap-2 p-3 bg-muted/40 rounded-lg border border-border">
+                <div className="flex items-center gap-2">
+                  <CheckCircle size={14} className="text-green-500 flex-shrink-0" />
+                  <span className="text-sm text-foreground">{email}</span>
+                </div>
+                <button onClick={() => removeEmail(email)} className="text-muted-foreground hover:text-destructive transition-colors">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add email */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Mail size={14} className="absolute left-3 top-3 text-muted-foreground" />
+            <Input
+              value={newEmail}
+              onChange={e => setNewEmail(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") addEmail(); }}
+              placeholder="yourname@gmail.com"
+              type="email"
+              className="pl-9"
+            />
+          </div>
+          <Button onClick={addEmail} className="hero-gradient gap-1.5" disabled={saveSettings.isPending}>
+            <Plus size={15} /> Add
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">You can add up to 3 extra emails. Notifications are sent when enabled below.</p>
+      </div>
+
+      {/* Notification type toggles */}
+      <div className="bg-card rounded-xl p-6 shadow-card space-y-4">
+        <div>
+          <h3 className="font-heading font-semibold text-foreground">What to Send</h3>
+          <p className="text-sm text-muted-foreground mt-1">Choose which events trigger an email to your addresses above.</p>
+        </div>
+        <div className="space-y-1">
           {NOTIF_OPTIONS.map(opt => (
             <div key={opt.key} className="flex items-center justify-between py-3 border-b border-border last:border-0">
-              <div className="flex items-start gap-3">
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${prefs[opt.key] ? "bg-primary/10" : "bg-muted"}`}>
-                  <opt.icon size={16} className={prefs[opt.key] ? "text-primary" : "text-muted-foreground"} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">{opt.label}</p>
-                  <p className="text-xs text-muted-foreground">{opt.desc}</p>
-                </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                <p className="text-xs text-muted-foreground">{opt.desc}</p>
               </div>
-              <Toggle checked={!!prefs[opt.key]} onChange={() => toggle(opt.key)} />
+              <Toggle checked={settings[opt.key] !== false} onChange={() => toggleType(opt.key)} />
             </div>
           ))}
         </div>
       </div>
 
-      <div className="bg-muted/50 rounded-xl p-4 text-xs text-muted-foreground">
-        <BellOff size={14} className="inline mr-1" />
-        In-app notification preferences. Email alerts depend on your school's communication settings.
+      <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
+        <Bell size={14} className="flex-shrink-0 mt-0.5" />
+        <span>Email notifications are sent automatically when school events happen. Make sure your notification emails are correct. Emails come from <strong>notifications@itainbellschool.com</strong>.</span>
       </div>
     </div>
   );
