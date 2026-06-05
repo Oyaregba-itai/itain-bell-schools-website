@@ -37,6 +37,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange, extraTabs = [] }: D
   const teacherTabs = [
     { id: "overview", label: "Overview", icon: BarChart3 },
     { id: "profile", label: "Profile", icon: Users },
+    { id: "my-subjects", label: "My Subjects", icon: BookOpen },
     { id: "upload", label: "Upload Results", icon: BookOpen },
     { id: "my-results", label: "My Results", icon: BarChart3 },
     { id: "timetable", label: "Timetable", icon: Clock },

@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { GraduationCap, BookOpen, BarChart3, Upload, Star, ClipboardCheck, CheckCircle, Clock, Send, Users } from "lucide-react";
+import { GraduationCap, BookOpen, BarChart3, Upload, Star, ClipboardCheck, CheckCircle, Clock, Send, Users, ChevronRight, ChevronLeft } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import EventsView from "@/components/EventsView";
@@ -42,6 +42,7 @@ const TeacherDashboard = () => {
     <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} extraTabs={extraTabs}>
       {activeTab === "overview" && <TeacherOverview onTabChange={setActiveTab} />}
       {activeTab === "profile" && <ProfilePage />}
+      {activeTab === "my-subjects" && <MySubjectsView />}
       {activeTab === "upload" && <UploadResults />}
       {activeTab === "my-results" && <MyResults />}
       {activeTab === "my-class" && isHeadOfClass && <MyClassView headClasses={headClasses!} />}
@@ -504,6 +505,186 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+};
+
+// ── My Subjects drill-down ────────────────────────────────────────────────────
+
+const MySubjectsView = () => {
+  const { user } = useAuth();
+  const [viewingSubject, setViewingSubject] = useState<string | null>(null);
+  const [viewingClass, setViewingClass] = useState<{ classId: string; className: string; subjectName: string } | null>(null);
+
+  const { data: mySubjects } = useQuery({
+    queryKey: ["my-subjects-full", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data } = await supabase.from("subjects").select("*").eq("teacher_id", user.id).order("name");
+      const rows = data || [];
+      const classIds = [...new Set(rows.map((s: any) => s.class_id).filter(Boolean))];
+      let classMap: Record<string, string> = {};
+      if (classIds.length > 0) {
+        const { data: cls } = await supabase.from("classes").select("id, name").in("id", classIds as string[]);
+        (cls || []).forEach((c: any) => { classMap[c.id] = c.name; });
+      }
+      return rows.map((s: any) => ({ ...s, className: classMap[s.class_id] || "—" }));
+    },
+    enabled: !!user,
+  });
+
+  // Group by subject name
+  const grouped = (mySubjects || []).reduce((acc: Record<string, any[]>, s: any) => {
+    if (!acc[s.name]) acc[s.name] = [];
+    acc[s.name].push(s);
+    return acc;
+  }, {});
+
+  // Level 3: students in a class doing a subject
+  if (viewingClass) {
+    return <SubjectClassStudents {...viewingClass} onBack={() => setViewingClass(null)} />;
+  }
+
+  // Level 2: classes for a specific subject
+  if (viewingSubject) {
+    const classes = grouped[viewingSubject] || [];
+    return (
+      <div className="space-y-6">
+        <button onClick={() => setViewingSubject(null)} className="flex items-center gap-2 text-muted-foreground hover:text-foreground text-sm transition-colors">
+          <ChevronLeft size={18} /> Back to My Subjects
+        </button>
+        <div className="bg-card rounded-xl p-5 shadow-card">
+          <h2 className="text-xl font-heading text-foreground">{viewingSubject}</h2>
+          <p className="text-muted-foreground text-sm mt-1">You teach this subject in {classes.length} {classes.length === 1 ? "class" : "classes"}</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {classes.map((s: any) => (
+            <button
+              key={s.id}
+              onClick={() => setViewingClass({ classId: s.class_id, className: s.className, subjectName: viewingSubject })}
+              className="bg-card rounded-xl p-5 shadow-card border border-border text-left hover:border-primary/40 hover:shadow-md transition-all group"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Users size={18} className="text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground group-hover:text-primary transition-colors">{s.className}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Click to see students</p>
+                  </div>
+                </div>
+                <ChevronRight size={16} className="text-muted-foreground group-hover:text-primary transition-colors" />
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Level 1: all subjects grouped
+  const subjectNames = Object.keys(grouped).sort();
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-heading text-foreground">My Subjects</h3>
+        <p className="text-muted-foreground text-sm mt-1">
+          {subjectNames.length} subject{subjectNames.length !== 1 ? "s" : ""} across {mySubjects?.length || 0} class assignment{(mySubjects?.length || 0) !== 1 ? "s" : ""}
+        </p>
+      </div>
+
+      {subjectNames.length === 0 && (
+        <div className="bg-card rounded-xl p-12 shadow-card text-center">
+          <BookOpen size={40} className="mx-auto mb-3 text-muted-foreground/30" />
+          <p className="text-muted-foreground font-medium">No subjects assigned yet</p>
+          <p className="text-sm text-muted-foreground mt-1">Contact your administrator to get subjects assigned to you.</p>
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {subjectNames.map(name => {
+          const classes = grouped[name];
+          return (
+            <button
+              key={name}
+              onClick={() => setViewingSubject(name)}
+              className="bg-card rounded-xl p-5 shadow-card border border-border text-left hover:border-primary/40 hover:shadow-md transition-all group"
+            >
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <BookOpen size={18} className="text-primary" />
+                </div>
+                <ChevronRight size={16} className="text-muted-foreground group-hover:text-primary transition-colors mt-1" />
+              </div>
+              <p className="font-semibold text-foreground group-hover:text-primary transition-colors">{name}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {classes.length} {classes.length === 1 ? "class" : "classes"}: {classes.map((c: any) => c.className).join(", ")}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const SubjectClassStudents = ({ classId, className, subjectName, onBack }: { classId: string; className: string; subjectName: string; onBack: () => void }) => {
+  const { data: students } = useQuery({
+    queryKey: ["subject-class-students", classId],
+    queryFn: async () => {
+      const { data } = await supabase.from("students").select("*").eq("class_id", classId).order("full_name");
+      return data || [];
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      <button onClick={onBack} className="flex items-center gap-2 text-muted-foreground hover:text-foreground text-sm transition-colors">
+        <ChevronLeft size={18} /> Back to {subjectName}
+      </button>
+
+      <div className="bg-card rounded-xl p-5 shadow-card">
+        <h2 className="text-xl font-heading text-foreground">{subjectName}</h2>
+        <p className="text-muted-foreground text-sm mt-1">{className} · {students?.length || 0} students</p>
+      </div>
+
+      <div className="bg-card rounded-xl shadow-card overflow-hidden">
+        <div className="px-5 py-4 border-b border-border">
+          <h4 className="font-heading font-semibold text-foreground">Students in {className}</h4>
+        </div>
+        <div className="divide-y divide-border">
+          {students?.map((student: any, i: number) => (
+            <div key={student.id} className="flex items-center gap-4 px-5 py-3 hover:bg-muted/20 transition-colors">
+              <span className="text-xs text-muted-foreground w-6 text-right flex-shrink-0">{i + 1}</span>
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {student.avatar_url
+                  ? <img src={student.avatar_url} className="w-full h-full object-cover" alt="" />
+                  : <span className="text-primary font-bold text-sm">{student.full_name?.[0]?.toUpperCase()}</span>
+                }
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-foreground">{student.full_name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {student.admission_number && `${student.admission_number} · `}
+                  {student.gender && <span className="capitalize">{student.gender}</span>}
+                  {student.date_of_birth && ` · Age ${new Date().getFullYear() - new Date(student.date_of_birth).getFullYear()}`}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {student.school_section && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full capitalize font-medium ${student.school_section === "primary" ? "bg-green-100 text-green-700" : student.school_section === "nursery" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}>
+                    {student.school_section}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+          {!students?.length && (
+            <div className="px-5 py-10 text-center text-muted-foreground text-sm">No students in this class.</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
