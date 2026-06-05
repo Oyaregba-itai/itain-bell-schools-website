@@ -9,12 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { GraduationCap, BookOpen } from "lucide-react";
+import { GraduationCap, BookOpen, BarChart3, Upload, Star } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import EventsView from "@/components/EventsView";
 import MessagingView from "@/components/MessagingView";
 import ProfilePage from "@/components/ProfilePage";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const TeacherDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
@@ -33,49 +34,198 @@ const TeacherDashboard = () => {
   );
 };
 
+const GRADE_COLORS: Record<string, string> = {
+  "A+": "#7B2D8B", "A": "#9B4DCA", "B+": "#166534", "B": "#16a34a",
+  "C+": "#1e40af", "C": "#3b82f6", "D": "#c2410c", "E": "#b91c1c",
+};
+
+const getHour = () => new Date().getHours();
+const greeting = () => getHour() < 12 ? "Good morning" : getHour() < 17 ? "Good afternoon" : "Good evening";
+
 const TeacherOverview = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
-  const { data: stats } = useQuery({
-    queryKey: ["teacher-stats", user?.id],
+  const { data: overview } = useQuery({
+    queryKey: ["teacher-overview", user?.id],
     queryFn: async () => {
-      if (!user?.id) return { subjects: 0, results: 0, testScores: 0 };
+      if (!user?.id) return null;
 
-      const [subjectsRes, resultsRes, testScoresRes] = await Promise.all([
-        supabase.from("subjects").select("id", { count: "exact" }).eq("teacher_id", user.id),
-        supabase.from("results").select("id", { count: "exact" }).eq("uploaded_by", user.id),
-        supabase.from("test_scores").select("id", { count: "exact" }).in(
-          "test_id",
-          (await supabase.from("tests").select("id").eq("teacher_id", user.id)).data?.map((t) => t.id) || []
-        ),
+      // My subjects with class names
+      const { data: subjectsRaw } = await supabase.from("subjects").select("*").eq("teacher_id", user.id).order("name");
+      const subjects = subjectsRaw || [];
+      const classIds = [...new Set(subjects.map((s: any) => s.class_id).filter(Boolean))];
+      let classMap: Record<string, string> = {};
+      if (classIds.length > 0) {
+        const { data: cls } = await supabase.from("classes").select("id, name").in("id", classIds as string[]);
+        (cls || []).forEach((c: any) => { classMap[c.id] = c.name; });
+      }
+      const mySubjects = subjects.map((s: any) => ({ ...s, className: classMap[s.class_id] || "—" }));
+
+      // Head of class?
+      const { data: headClasses } = await supabase.from("classes").select("id, name").eq("head_teacher_id", user.id);
+
+      // Results uploaded
+      const { data: myResults } = await supabase.from("results").select("*").eq("uploaded_by", user.id).order("created_at", { ascending: false }).limit(6);
+      const results = myResults || [];
+      const studentIds = [...new Set(results.map((r: any) => r.student_id).filter(Boolean))];
+      const subjectIds = [...new Set(results.map((r: any) => r.subject_id).filter(Boolean))];
+      const [sRes, subRes] = await Promise.all([
+        studentIds.length > 0 ? supabase.from("students").select("id, full_name").in("id", studentIds as string[]) : { data: [] },
+        subjectIds.length > 0 ? supabase.from("subjects").select("id, name").in("id", subjectIds as string[]) : { data: [] },
       ]);
+      const studentMap: Record<string, string> = {};
+      const subjectMap: Record<string, string> = {};
+      (sRes.data || []).forEach((s: any) => { studentMap[s.id] = s.full_name; });
+      (subRes.data || []).forEach((s: any) => { subjectMap[s.id] = s.name; });
+      const recentResults = results.map((r: any) => ({ ...r, studentName: studentMap[r.student_id] || "—", subjectName: subjectMap[r.subject_id] || "—" }));
 
-      return {
-        subjects: subjectsRes.count || 0,
-        results: resultsRes.count || 0,
-        testScores: testScoresRes.count || 0,
-      };
+      // Grade distribution
+      const { data: allResults } = await supabase.from("results").select("grade_letter").eq("uploaded_by", user.id);
+      const gradeCounts: Record<string, number> = {};
+      (allResults || []).forEach((r: any) => { if (r.grade_letter) gradeCounts[r.grade_letter] = (gradeCounts[r.grade_letter] || 0) + 1; });
+      const gradeData = ["A+","A","B+","B","C+","C","D","E"].filter(g => gradeCounts[g]).map(g => ({ grade: g, count: gradeCounts[g] }));
+
+      // Unique students taught
+      const { data: studentsRes } = await supabase.from("results").select("student_id").eq("uploaded_by", user.id);
+      const uniqueStudents = new Set((studentsRes || []).map((r: any) => r.student_id)).size;
+
+      return { mySubjects, headClasses: headClasses || [], recentResults, gradeData, totalResults: allResults?.length || 0, uniqueStudents };
     },
     enabled: !!user,
   });
 
+  const firstName = profile?.full_name?.split(" ")[0] || "Teacher";
+
   return (
-    <div className="grid grid-cols-3 gap-4">
-      <div className="bg-card rounded-xl p-5 shadow-card">
-        <BookOpen className="text-primary mb-2" size={24} />
-        <div className="text-2xl font-heading text-foreground">{stats?.subjects || 0}</div>
-        <div className="text-sm text-muted-foreground">My Subjects</div>
+    <div className="space-y-6">
+
+      {/* Welcome banner */}
+      <div className="bg-card rounded-xl p-5 shadow-card hero-gradient text-primary-foreground">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0">
+            {profile?.profile_picture_url
+              ? <img src={profile.profile_picture_url} className="w-full h-full rounded-full object-cover" />
+              : firstName[0]?.toUpperCase()
+            }
+          </div>
+          <div>
+            <p className="text-lg font-heading">{greeting()}, {firstName}!</p>
+            <p className="text-sm opacity-80">
+              {overview?.headClasses?.length
+                ? `Head of Class — ${overview.headClasses.map((c: any) => c.name).join(", ")}`
+                : "Welcome to your teacher portal"}
+            </p>
+          </div>
+        </div>
       </div>
-      <div className="bg-card rounded-xl p-5 shadow-card">
-        <GraduationCap className="text-primary mb-2" size={24} />
-        <div className="text-2xl font-heading text-foreground">{stats?.results || 0}</div>
-        <div className="text-sm text-muted-foreground">Results Uploaded</div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: "My Subjects", value: overview?.mySubjects?.length || 0, icon: BookOpen, color: "text-blue-600", bg: "bg-blue-50" },
+          { label: "Results Uploaded", value: overview?.totalResults || 0, icon: BarChart3, color: "text-green-600", bg: "bg-green-50" },
+          { label: "Students Assessed", value: overview?.uniqueStudents || 0, icon: GraduationCap, color: "text-purple-600", bg: "bg-purple-50" },
+        ].map(card => (
+          <div key={card.label} className="bg-card rounded-xl p-5 shadow-card">
+            <div className={`w-10 h-10 rounded-lg ${card.bg} flex items-center justify-center mb-3`}>
+              <card.icon className={card.color} size={20} />
+            </div>
+            <div className="text-2xl font-heading text-foreground">{card.value}</div>
+            <div className="text-sm text-muted-foreground">{card.label}</div>
+          </div>
+        ))}
       </div>
-      <div className="bg-card rounded-xl p-5 shadow-card">
-        <GraduationCap className="text-primary mb-2" size={24} />
-        <div className="text-2xl font-heading text-foreground">{stats?.testScores || 0}</div>
-        <div className="text-sm text-muted-foreground">Test Scores Entered</div>
+
+      <div className="grid lg:grid-cols-2 gap-6">
+
+        {/* My subjects list */}
+        <div className="bg-card rounded-xl p-5 shadow-card">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="font-heading font-semibold text-foreground flex items-center gap-2">
+              <BookOpen size={16} className="text-primary" /> My Subjects
+            </h4>
+            <span className="text-xs text-muted-foreground">{overview?.mySubjects?.length || 0} assignments</span>
+          </div>
+          {overview?.mySubjects?.length ? (
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {overview.mySubjects.map((s: any) => (
+                <div key={s.id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40">
+                  <span className="text-sm font-medium text-foreground">{s.name}</span>
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{s.className}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No subjects assigned yet.</p>
+          )}
+        </div>
+
+        {/* Grade distribution */}
+        <div className="bg-card rounded-xl p-5 shadow-card">
+          <h4 className="font-heading font-semibold text-foreground flex items-center gap-2 mb-4">
+            <Star size={16} className="text-primary" /> Grade Distribution
+          </h4>
+          {overview?.gradeData?.length ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={overview.gradeData} margin={{ left: -20 }}>
+                <XAxis dataKey="grade" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v) => [`${v} results`, "Count"]} />
+                <Bar dataKey="count" radius={[4,4,0,0]}>
+                  {overview.gradeData.map((entry: any) => (
+                    <Cell key={entry.grade} fill={GRADE_COLORS[entry.grade] || "#6b7280"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[200px] flex flex-col items-center justify-center gap-3 text-muted-foreground">
+              <BarChart3 size={40} className="opacity-20" />
+              <p className="text-sm">No results uploaded yet</p>
+              <Button size="sm" className="hero-gradient gap-2 text-xs" onClick={() => {}}>
+                <Upload size={13} /> Upload Results
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Recent uploads */}
+      {(overview?.recentResults?.length ?? 0) > 0 && (
+        <div className="bg-card rounded-xl p-5 shadow-card">
+          <h4 className="font-heading font-semibold text-foreground mb-4 flex items-center gap-2">
+            <GraduationCap size={16} className="text-primary" /> Recent Uploads
+          </h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted">
+                <tr>
+                  <th className="text-left p-2.5 font-medium text-muted-foreground">Student</th>
+                  <th className="text-left p-2.5 font-medium text-muted-foreground">Subject</th>
+                  <th className="text-center p-2.5 font-medium text-muted-foreground">Score /30</th>
+                  <th className="text-center p-2.5 font-medium text-muted-foreground">Grade</th>
+                  <th className="text-left p-2.5 font-medium text-muted-foreground">Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {overview?.recentResults?.map((r: any) => (
+                  <tr key={r.id} className="border-t border-border">
+                    <td className="p-2.5 text-foreground font-medium">{r.studentName}</td>
+                    <td className="p-2.5 text-muted-foreground">{r.subjectName}</td>
+                    <td className="p-2.5 text-center font-semibold">{r.total_score ?? "—"}</td>
+                    <td className="p-2.5 text-center">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: (GRADE_COLORS[r.grade_letter] || "#6b7280") + "22", color: GRADE_COLORS[r.grade_letter] || "#6b7280" }}>
+                        {r.grade_letter || "—"}
+                      </span>
+                    </td>
+                    <td className="p-2.5 text-muted-foreground text-xs capitalize">{r.result_type?.replace("_", " ") || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
