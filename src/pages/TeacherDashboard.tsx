@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { GraduationCap, BookOpen, BarChart3, Upload, Star, ClipboardCheck, CheckCircle, Clock, Send } from "lucide-react";
+import { GraduationCap, BookOpen, BarChart3, Upload, Star, ClipboardCheck, CheckCircle, Clock, Send, Users } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import EventsView from "@/components/EventsView";
@@ -19,14 +19,32 @@ import ProfilePage from "@/components/ProfilePage";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const TeacherDashboard = () => {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
 
+  // Check if this teacher is head of any class
+  const { data: headClasses } = useQuery({
+    queryKey: ["head-classes", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data } = await supabase.from("classes").select("id, name").eq("head_teacher_id", user.id);
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  const isHeadOfClass = (headClasses?.length ?? 0) > 0;
+  const extraTabs = isHeadOfClass
+    ? [{ id: "my-class", label: `My Class${headClasses?.[0]?.name ? ` — ${headClasses[0].name}` : ""}`, icon: Users }]
+    : [];
+
   return (
-    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
+    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} extraTabs={extraTabs}>
       {activeTab === "overview" && <TeacherOverview onTabChange={setActiveTab} />}
       {activeTab === "profile" && <ProfilePage />}
       {activeTab === "upload" && <UploadResults />}
       {activeTab === "my-results" && <MyResults />}
+      {activeTab === "my-class" && isHeadOfClass && <MyClassView headClasses={headClasses!} />}
       {activeTab === "timetable" && <TimetableView />}
       {activeTab === "events" && <EventsView />}
       {activeTab === "announcements" && <AnnouncementsView />}
@@ -486,6 +504,188 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+};
+
+const MyClassView = ({ headClasses }: { headClasses: any[] }) => {
+  const { user } = useAuth();
+  const [selTerm, setSelTerm] = useState("");
+  const [selType, setSelType] = useState<"mid_term" | "end_of_term">("mid_term");
+
+  const classId = headClasses[0]?.id;
+  const className = headClasses[0]?.name;
+
+  const { data: terms } = useQuery({
+    queryKey: ["terms"],
+    queryFn: async () => {
+      const { data } = await supabase.from("terms").select("*").order("created_at");
+      return data || [];
+    },
+  });
+
+  const { data: classInfo } = useQuery({
+    queryKey: ["my-class-view", classId, selTerm, selType],
+    enabled: !!classId,
+    queryFn: async () => {
+      const { data: students } = await supabase.from("students").select("*").eq("class_id", classId).order("full_name");
+      const studentList = students || [];
+      const studentIds = studentList.map((s: any) => s.id);
+
+      const { data: subjects } = await supabase.from("subjects").select("id, name").eq("class_id", classId);
+      const totalSubjects = subjects?.length || 0;
+
+      // Results per student for selected term + type
+      let resultCounts: Record<string, number> = {};
+      let submissions: Record<string, any> = {};
+      if (selTerm && studentIds.length > 0) {
+        const { data: results } = await supabase.from("results").select("student_id, subject_id")
+          .in("student_id", studentIds).eq("term_id", selTerm).eq("result_type", selType);
+        (results || []).forEach((r: any) => {
+          resultCounts[r.student_id] = (resultCounts[r.student_id] || 0) + 1;
+        });
+        const { data: subs } = await supabase.from("report_submissions").select("*")
+          .in("student_id", studentIds).eq("term_id", selTerm).eq("result_type", selType);
+        (subs || []).forEach((s: any) => { submissions[s.student_id] = s; });
+      }
+
+      return { students: studentList, totalSubjects, resultCounts, submissions };
+    },
+  });
+
+  const students = classInfo?.students || [];
+  const totalSubjects = classInfo?.totalSubjects || 0;
+  const ready = students.filter((s: any) => (classInfo?.resultCounts[s.id] || 0) >= totalSubjects && totalSubjects > 0).length;
+
+  return (
+    <div className="space-y-6">
+      {/* Class header */}
+      <div className="hero-gradient rounded-xl p-6 text-primary-foreground">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+            <Users size={28} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-heading">{className}</h2>
+            <p className="opacity-80 text-sm">{students.length} students · {totalSubjects} subjects · Head of Class</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick stats */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: "Total Students", value: students.length, color: "text-blue-600", bg: "bg-blue-50" },
+          { label: "Subjects", value: totalSubjects, color: "text-green-600", bg: "bg-green-50" },
+          { label: selTerm ? "Results Ready" : "Select term", value: selTerm ? ready : "—", color: "text-purple-600", bg: "bg-purple-50" },
+        ].map(card => (
+          <div key={card.label} className="bg-card rounded-xl p-4 shadow-card">
+            <div className={`text-2xl font-heading ${card.color}`}>{card.value}</div>
+            <div className="text-xs text-muted-foreground mt-1">{card.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Term filter */}
+      <div className="bg-card rounded-xl p-4 shadow-card flex flex-wrap gap-3 items-end">
+        <div className="flex-1 min-w-[180px]">
+          <p className="text-xs text-muted-foreground mb-1">Filter by term to see results progress</p>
+          <select value={selTerm} onChange={e => setSelTerm(e.target.value)} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-background text-foreground">
+            <option value="">All students</option>
+            {terms?.map((t: any) => <option key={t.id} value={t.id}>{t.name} ({t.academic_year})</option>)}
+          </select>
+        </div>
+        {selTerm && (
+          <div className="flex gap-1 bg-muted rounded-lg p-1">
+            {(["mid_term", "end_of_term"] as const).map(t => (
+              <button key={t} onClick={() => setSelType(t)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${selType === t ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}>
+                {t === "mid_term" ? "Mid Term" : "End of Term"}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Students table */}
+      <div className="bg-card rounded-xl shadow-card overflow-hidden">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <h4 className="font-heading font-semibold text-foreground">Students in {className}</h4>
+          <span className="text-xs text-muted-foreground">{students.length} enrolled</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted">
+              <tr>
+                <th className="text-left p-3 font-medium text-muted-foreground">#</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Student</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Gender</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Admission No.</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Section</th>
+                {selTerm && <th className="text-left p-3 font-medium text-muted-foreground">Results Progress</th>}
+                {selTerm && <th className="text-left p-3 font-medium text-muted-foreground">Report Status</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {students.map((student: any, i: number) => {
+                const uploaded = classInfo?.resultCounts[student.id] || 0;
+                const sub = classInfo?.submissions[student.id];
+                const pct = totalSubjects > 0 ? Math.round((uploaded / totalSubjects) * 100) : 0;
+                return (
+                  <tr key={student.id} className="border-t border-border hover:bg-muted/20 transition-colors">
+                    <td className="p-3 text-muted-foreground text-xs">{i + 1}</td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                          {student.avatar_url
+                            ? <img src={student.avatar_url} className="w-full h-full object-cover" alt="" />
+                            : <span className="text-primary font-bold text-sm">{student.full_name?.[0]?.toUpperCase()}</span>
+                          }
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">{student.full_name}</p>
+                          {student.student_id && <p className="text-xs text-muted-foreground">{student.student_id}</p>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-3 text-muted-foreground capitalize">{student.gender || "—"}</td>
+                    <td className="p-3 text-muted-foreground text-xs">{student.admission_number || "—"}</td>
+                    <td className="p-3">
+                      {student.school_section && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full capitalize font-medium ${student.school_section === "primary" ? "bg-green-100 text-green-700" : student.school_section === "nursery" ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}`}>
+                          {student.school_section}
+                        </span>
+                      )}
+                    </td>
+                    {selTerm && (
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden w-24">
+                            <div className={`h-full rounded-full transition-all ${pct === 100 ? "bg-green-500" : pct > 50 ? "bg-amber-500" : "bg-red-400"}`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">{uploaded}/{totalSubjects}</span>
+                        </div>
+                      </td>
+                    )}
+                    {selTerm && (
+                      <td className="p-3">
+                        {sub?.status === "approved"
+                          ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1 w-fit"><CheckCircle size={10} /> Approved</span>
+                          : sub?.status === "submitted"
+                            ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full w-fit">Submitted</span>
+                            : pct === 100
+                              ? <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full w-fit">Ready to submit</span>
+                              : <span className="text-xs text-muted-foreground">Pending results</span>
+                        }
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };

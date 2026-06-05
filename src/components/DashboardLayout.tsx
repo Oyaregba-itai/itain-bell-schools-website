@@ -9,9 +9,10 @@ interface DashboardLayoutProps {
   children: ReactNode;
   activeTab: string;
   onTabChange: (tab: string) => void;
+  extraTabs?: { id: string; label: string; icon: any }[];
 }
 
-const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutProps) => {
+const DashboardLayout = ({ children, activeTab, onTabChange, extraTabs = [] }: DashboardLayoutProps) => {
   const { profile, role, signOut } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -54,7 +55,8 @@ const DashboardLayout = ({ children, activeTab, onTabChange }: DashboardLayoutPr
     { id: "messaging", label: "Messages", icon: MessageCircle },
   ];
 
-  const tabs = role === "admin" ? adminTabs : role === "teacher" ? teacherTabs : parentTabs;
+  const baseTabs = role === "admin" ? adminTabs : role === "teacher" ? teacherTabs : parentTabs;
+  const tabs = [...baseTabs, ...extraTabs];
 
   const roleLabel = role === "admin" ? "Administrator" : role === "teacher" ? "Teacher" : "Parent";
 
