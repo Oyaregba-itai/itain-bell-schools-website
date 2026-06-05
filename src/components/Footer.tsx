@@ -54,19 +54,15 @@ const Footer = () => {
             <h4 className="font-heading text-lg mb-4">Contact Us</h4>
             <ul className="space-y-3 text-sm text-primary-foreground/60">
               <li className="flex items-start gap-2">
-                <MapPin size={16} className="mt-0.5 shrink-0" />
-                <span>Lagos, Nigeria</span>
+                <MapPin size={16} className="mt-0.5 shrink-0 text-secondary" />
+                <span>7, Mustapha Street, Off Olanrewaju/Olayiwola Street, Oregun, Ikeja, Lagos.</span>
               </li>
               <li className="flex items-center gap-2">
-                <Phone size={16} className="shrink-0" />
-                <span>+234 (0) 000 000 0000</span>
+                <Mail size={16} className="shrink-0 text-secondary" />
+                <a href="mailto:info@itainbellschool.com" className="hover:text-primary-foreground transition-colors">info@itainbellschool.com</a>
               </li>
               <li className="flex items-center gap-2">
-                <Mail size={16} className="shrink-0" />
-                <span>info@itainbellschool.com</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <Clock size={16} className="shrink-0" />
+                <Clock size={16} className="shrink-0 text-secondary" />
                 <span>Mon – Fri, 7:30 AM – 4:00 PM</span>
               </li>
             </ul>
