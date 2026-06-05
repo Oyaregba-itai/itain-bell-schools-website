@@ -941,6 +941,7 @@ const StudentList = ({ onSelect }: { onSelect: (id: string) => void }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [newStudent, setNewStudent] = useState({
     first_name: "", last_name: "", class_id: "", gender: "",
     date_of_birth: "", school_section: "", admission_number: "",
@@ -1001,8 +1002,11 @@ const StudentList = ({ onSelect }: { onSelect: (id: string) => void }) => {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
         <h3 className="text-lg font-heading text-foreground">Students</h3>
+        <div className="flex gap-2 flex-1 max-w-sm">
+          <Input placeholder="Search by name or admission no..." value={search} onChange={e => setSearch(e.target.value)} className="text-sm" />
+        </div>
         <Button className="hero-gradient" onClick={() => setAddOpen(true)}>
           <Plus size={18} className="mr-2" /> Add Student
         </Button>
@@ -1082,7 +1086,12 @@ const StudentList = ({ onSelect }: { onSelect: (id: string) => void }) => {
             </tr>
           </thead>
           <tbody>
-            {students?.map((student: any) => {
+            {students?.filter((s: any) => {
+              if (!search.trim()) return true;
+              const q = search.toLowerCase();
+              const name = (s.full_name || `${s.first_name || ""} ${s.last_name || ""}`).toLowerCase();
+              return name.includes(q) || (s.admission_number || "").toLowerCase().includes(q);
+            }).map((student: any) => {
               const sName = student.full_name || `${student.first_name || ""} ${student.last_name || ""}`.trim() || "Unnamed";
               return (
                 <tr key={student.id} className="border-t border-border hover:bg-muted/30 cursor-pointer" onClick={() => onSelect(student.id)}>
@@ -1102,8 +1111,15 @@ const StudentList = ({ onSelect }: { onSelect: (id: string) => void }) => {
                 </tr>
               );
             })}
-            {!students?.length && (
+            {students?.length === 0 && (
               <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No students yet.</td></tr>
+            )}
+            {(students?.length ?? 0) > 0 && search && students?.filter((s: any) => {
+              const q = search.toLowerCase();
+              const name = (s.full_name || `${s.first_name || ""} ${s.last_name || ""}`).toLowerCase();
+              return name.includes(q) || (s.admission_number || "").toLowerCase().includes(q);
+            }).length === 0 && (
+              <tr><td colSpan={6} className="p-8 text-center text-muted-foreground">No students match "{search}".</td></tr>
             )}
           </tbody>
         </table>
@@ -2407,14 +2423,15 @@ const ManageEvents = () => {
   );
 };
 
-const getGradeLetterAdmin = (score: number): string => {
-  if (score >= 28.5) return "A+";
-  if (score >= 27.0) return "A";
-  if (score >= 25.5) return "B+";
-  if (score >= 24.0) return "B";
-  if (score >= 22.5) return "C+";
-  if (score >= 21.0) return "C";
-  if (score >= 18.0) return "D";
+const getGradeLetterAdmin = (score: number, outOf: number = 30): string => {
+  const pct = outOf > 0 ? (score / outOf) * 100 : 0;
+  if (pct >= 95) return "A+";
+  if (pct >= 90) return "A";
+  if (pct >= 85) return "B+";
+  if (pct >= 80) return "B";
+  if (pct >= 75) return "C+";
+  if (pct >= 70) return "C";
+  if (pct >= 60) return "D";
   return "E";
 };
 
@@ -2473,8 +2490,7 @@ const SubmittedReportCards = () => {
       </div>
 
       {previewSub && (
-        <ReportCard studentId={previewSub.student_id} termId={previewSub.term_id} resultType={previewSub.result_type} onClose={() => setPreviewSub(null)}>
-        </ReportCard>
+        <ReportCard studentId={previewSub.student_id} termId={previewSub.term_id} resultType={previewSub.result_type} onClose={() => setPreviewSub(null)} />
       )}
 
       <div className="bg-card rounded-xl shadow-card overflow-hidden">
@@ -2624,8 +2640,8 @@ const LiveReportCardPreview = ({
                       className="h-8 text-sm w-24"
                       placeholder="Score /30"
                     />
-                    <span className="text-xs font-bold" style={{ color: row.total_score ? { A: "#7B2D8B", B: "#166534", C: "#1e40af", D: "#c2410c", E: "#b91c1c" }[getGradeLetterAdmin(parseFloat(row.total_score) || 0)[0]] || "#111" : "#999" }}>
-                      {row.total_score ? getGradeLetterAdmin(parseFloat(row.total_score) || 0) : "—"}
+                    <span className="text-xs font-bold" style={{ color: row.total_score ? { A: "#7B2D8B", B: "#166534", C: "#1e40af", D: "#c2410c", E: "#b91c1c" }[getGradeLetterAdmin(parseFloat(row.total_score) || 0, selType === "mid_term" ? 30 : 70)[0]] || "#111" : "#999" }}>
+                      {row.total_score ? getGradeLetterAdmin(parseFloat(row.total_score) || 0, selType === "mid_term" ? 30 : 70) : "—"}
                     </span>
                     <Button size="sm" className="h-8 text-xs hero-gradient ml-auto" onClick={() => updateResult.mutate(row)} disabled={updateResult.isPending}>
                       Save
@@ -2794,7 +2810,28 @@ const ViewAllResults = () => {
 
       {/* ── Detailed results table ── */}
       <div>
-        <h3 className="text-lg font-heading text-foreground mb-4">All Results</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-heading text-foreground">All Results</h3>
+          {results.length > 0 && (
+            <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={() => {
+              const rows = [["Student", "Subject", "Score", "Grade", "Type", "Term"]];
+              results.forEach((r: any) => {
+                rows.push([
+                  r.studentData ? `${r.studentData.first_name} ${r.studentData.last_name}` : "—",
+                  r.subjectName, String(r.total_score ?? ""), r.grade_letter || "—",
+                  r.result_type?.replace("_", " ") || "—", r.termName,
+                ]);
+              });
+              const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+              const blob = new Blob([csv], { type: "text/csv" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a"); a.href = url; a.download = "results.csv"; a.click();
+              URL.revokeObjectURL(url);
+            }}>
+              ⬇ Export CSV
+            </Button>
+          )}
+        </div>
         <div className="bg-card rounded-xl shadow-card overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted">
@@ -2842,6 +2879,7 @@ const ViewAllResults = () => {
               )}
             </tbody>
           </table>
+        </div>
         </div>
       </div>
     </div>

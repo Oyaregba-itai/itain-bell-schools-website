@@ -128,31 +128,39 @@ const ChildrenResults = () => {
       if (!childIds.length)
         return { results: [], studentsMap: new Map(), subjectsMap: new Map(), termsMap: new Map() };
 
-      const { data: resultsData, error: resultsError } = await supabase
-        .from("results")
-        .select(
-          `
-          *,
-          subjects:subject_id(id, name),
-          students:student_id(id, first_name, last_name),
-          terms:term_id(id, name)
-        `
-        )
-        .in("student_id", childIds);
+      // Only show results from approved report submissions
+      const { data: approvedSubs } = await supabase
+        .from("report_submissions").select("student_id, term_id, result_type")
+        .eq("status", "approved").in("student_id", childIds);
+      const approvedKeys = new Set((approvedSubs || []).map((s: any) => `${s.student_id}|${s.term_id}|${s.result_type}`));
 
+      const { data: rawResults, error: resultsError } = await supabase
+        .from("results").select("*").in("student_id", childIds);
       if (resultsError) throw resultsError;
+
+      // Filter to only approved results
+      const resultsData = (rawResults || []).filter((r: any) =>
+        approvedKeys.has(`${r.student_id}|${r.term_id}|${r.result_type}`)
+      );
+
+      const subjectIds = [...new Set(resultsData.map((r: any) => r.subject_id).filter(Boolean))];
+      const termIds = [...new Set(resultsData.map((r: any) => r.term_id).filter(Boolean))];
+
+      const [subjectsRes, termsRes, studentsRes] = await Promise.all([
+        subjectIds.length > 0 ? supabase.from("subjects").select("id, name").in("id", subjectIds) : { data: [] },
+        termIds.length > 0 ? supabase.from("terms").select("id, name").in("id", termIds) : { data: [] },
+        supabase.from("students").select("id, full_name, first_name, last_name").in("id", childIds),
+      ]);
 
       const studentsMap = new Map();
       const subjectsMap = new Map();
       const termsMap = new Map();
 
-      resultsData?.forEach((result: any) => {
-        if (result.students) studentsMap.set(result.student_id, result.students);
-        if (result.subjects) subjectsMap.set(result.subject_id, result.subjects);
-        if (result.terms) termsMap.set(result.term_id, result.terms);
-      });
+      (studentsRes.data || []).forEach((s: any) => studentsMap.set(s.id, s));
+      (subjectsRes.data || []).forEach((s: any) => subjectsMap.set(s.id, s));
+      (termsRes.data || []).forEach((t: any) => termsMap.set(t.id, t));
 
-      return { results: resultsData || [], studentsMap, subjectsMap, termsMap };
+      return { results: resultsData, studentsMap, subjectsMap, termsMap };
     },
     enabled: childIds.length > 0,
   });
@@ -220,13 +228,13 @@ const ChildrenResults = () => {
           </thead>
           <tbody>
             {results?.map((r: any) => {
-              const student = studentsMap.get(r.student_id);
               const subject = subjectsMap.get(r.subject_id);
               const term = termsMap.get(r.term_id);
+              const student = studentsMap.get(r.student_id);
               return (
                 <tr key={r.id} className="border-t border-border">
                   <td className="p-3 text-foreground">
-                    {student?.first_name} {student?.last_name}
+                    {student?.full_name || `${student?.first_name || ""} ${student?.last_name || ""}`.trim() || "—"}
                   </td>
                   <td className="p-3 text-muted-foreground">{subject?.name || "—"}</td>
                   <td className="p-3 text-foreground font-semibold">{r.total_score || "—"}</td>
@@ -251,7 +259,7 @@ const ChildrenResults = () => {
             {(!results || results.length === 0) && (
               <tr>
                 <td colSpan={6} className="p-6 text-center text-muted-foreground">
-                  No results available yet.
+                  No approved results yet. Results are published by the school after the head of class reviews and the admin approves them.
                 </td>
               </tr>
             )}

@@ -37,7 +37,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
       ]);
       if (studentRes.error) throw studentRes.error;
 
-      // Get class name
+      // Get class name (flat query — no FK joins)
       let className = "—";
       if (studentRes.data?.class_id) {
         const { data: cls } = await supabase.from("classes").select("name").eq("id", studentRes.data.class_id).single();

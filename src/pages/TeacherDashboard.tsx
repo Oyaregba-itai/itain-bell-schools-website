@@ -440,7 +440,7 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
                   <thead className="bg-muted">
                     <tr>
                       <th className="text-left p-2.5 font-medium text-muted-foreground">Subject</th>
-                      <th className="text-center p-2.5 font-medium text-muted-foreground">Score /30</th>
+                      <th className="text-center p-2.5 font-medium text-muted-foreground">Score /{selType === "mid_term" ? 30 : 70}</th>
                       <th className="text-center p-2.5 font-medium text-muted-foreground">Grade</th>
                     </tr>
                   </thead>
@@ -1136,35 +1136,28 @@ const MyResults = () => {
       if (!user?.id) return { results: [], studentsMap: new Map(), subjectsMap: new Map(), termsMap: new Map() };
 
       const { data: resultsData, error: resultsError } = await supabase
-        .from("results")
-        .select(
-          `
-          *,
-          students:student_id(id, first_name, last_name),
-          subjects:subject_id(id, name),
-          terms:term_id(id, name)
-        `
-        )
-        .eq("uploaded_by", user.id);
-
+        .from("results").select("*").eq("uploaded_by", user.id).order("created_at", { ascending: false });
       if (resultsError) throw resultsError;
+
+      const rows = resultsData || [];
+      const studentIds = [...new Set(rows.map((r: any) => r.student_id).filter(Boolean))];
+      const subjectIds = [...new Set(rows.map((r: any) => r.subject_id).filter(Boolean))];
+      const termIds = [...new Set(rows.map((r: any) => r.term_id).filter(Boolean))];
+
+      const [sRes, subRes, tRes] = await Promise.all([
+        studentIds.length > 0 ? supabase.from("students").select("id, full_name, first_name, last_name").in("id", studentIds) : { data: [] },
+        subjectIds.length > 0 ? supabase.from("subjects").select("id, name").in("id", subjectIds) : { data: [] },
+        termIds.length > 0 ? supabase.from("terms").select("id, name").in("id", termIds) : { data: [] },
+      ]);
 
       const studentsMap = new Map();
       const subjectsMap = new Map();
       const termsMap = new Map();
+      (sRes.data || []).forEach((s: any) => studentsMap.set(s.id, s));
+      (subRes.data || []).forEach((s: any) => subjectsMap.set(s.id, s));
+      (tRes.data || []).forEach((t: any) => termsMap.set(t.id, t));
 
-      resultsData?.forEach((result: any) => {
-        if (result.students) studentsMap.set(result.student_id, result.students);
-        if (result.subjects) subjectsMap.set(result.subject_id, result.subjects);
-        if (result.terms) termsMap.set(result.term_id, result.terms);
-      });
-
-      return {
-        results: resultsData || [],
-        studentsMap,
-        subjectsMap,
-        termsMap,
-      };
+      return { results: rows, studentsMap, subjectsMap, termsMap };
     },
     enabled: !!user,
   });
@@ -1196,7 +1189,7 @@ const MyResults = () => {
               return (
                 <tr key={r.id} className="border-t border-border">
                   <td className="p-3 text-foreground">
-                    {student?.first_name} {student?.last_name}
+                    {student?.full_name || `${student?.first_name || ""} ${student?.last_name || ""}`.trim() || "—"}
                   </td>
                   <td className="p-3 text-muted-foreground">{subject?.name || "—"}</td>
                   <td className="p-3 text-foreground font-semibold">{r.total_score || "—"}</td>
