@@ -17,7 +17,7 @@ const AdmissionsCTA = () => {
 
           <div className="relative px-8 py-16 md:py-24 text-center max-w-2xl mx-auto">
             <span className="inline-block px-3 py-1 rounded-full bg-primary-foreground/15 text-primary-foreground text-sm font-medium mb-4">
-              2025/2026 Admissions Open
+              2026/2027 Admissions Now Open
             </span>
             <h2 className="text-3xl md:text-4xl font-heading text-primary-foreground mb-4">
               Give Your Child the Best Start
