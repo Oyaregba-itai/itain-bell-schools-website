@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { GraduationCap, BookOpen, BarChart3, Upload, Star } from "lucide-react";
+import { GraduationCap, BookOpen, BarChart3, Upload, Star, ClipboardCheck, CheckCircle, Clock, Send } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import EventsView from "@/components/EventsView";
@@ -22,7 +23,7 @@ const TeacherDashboard = () => {
 
   return (
     <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
-      {activeTab === "overview" && <TeacherOverview />}
+      {activeTab === "overview" && <TeacherOverview onTabChange={setActiveTab} />}
       {activeTab === "profile" && <ProfilePage />}
       {activeTab === "upload" && <UploadResults />}
       {activeTab === "my-results" && <MyResults />}
@@ -42,7 +43,13 @@ const GRADE_COLORS: Record<string, string> = {
 const getHour = () => new Date().getHours();
 const greeting = () => getHour() < 12 ? "Good morning" : getHour() < 17 ? "Good afternoon" : "Good evening";
 
-const TeacherOverview = () => {
+// Strip title prefix (Mrs, Mr, Miss, Ms, Dr, Coach) to get a usable first name
+const extractFirstName = (fullName?: string | null) => {
+  if (!fullName) return "Teacher";
+  return fullName.replace(/^(Mrs?\.?|Miss|Ms\.?|Dr\.?|Coach)\s+/i, "").split(" ")[0];
+};
+
+const TeacherOverview = ({ onTabChange }: { onTabChange: (tab: string) => void }) => {
   const { user, profile } = useAuth();
 
   const { data: overview } = useQuery({
@@ -94,7 +101,7 @@ const TeacherOverview = () => {
     enabled: !!user,
   });
 
-  const firstName = profile?.full_name?.split(" ")[0] || "Teacher";
+  const firstName = extractFirstName(profile?.full_name);
 
   return (
     <div className="space-y-6">
@@ -182,7 +189,7 @@ const TeacherOverview = () => {
             <div className="h-[200px] flex flex-col items-center justify-center gap-3 text-muted-foreground">
               <BarChart3 size={40} className="opacity-20" />
               <p className="text-sm">No results uploaded yet</p>
-              <Button size="sm" className="hero-gradient gap-2 text-xs" onClick={() => {}}>
+              <Button size="sm" className="hero-gradient gap-2 text-xs" onClick={() => onTabChange("upload")}>
                 <Upload size={13} /> Upload Results
               </Button>
             </div>
@@ -226,6 +233,259 @@ const TeacherOverview = () => {
           </div>
         </div>
       )}
+
+      {/* Head-of-class report submission section */}
+      {(overview?.headClasses?.length ?? 0) > 0 && user && (
+        <HeadOfClassReports userId={user.id} headClasses={overview!.headClasses} />
+      )}
+    </div>
+  );
+};
+
+const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClasses: any[] }) => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [selTerm, setSelTerm] = useState("");
+  const [selType, setSelType] = useState<"mid_term" | "end_of_term">("mid_term");
+  const [reviewing, setReviewing] = useState<any | null>(null);
+  const [headComment, setHeadComment] = useState("");
+
+  const classId = headClasses[0]?.id;
+
+  const { data: terms } = useQuery({
+    queryKey: ["terms"],
+    queryFn: async () => {
+      const { data } = await supabase.from("terms").select("*").order("created_at");
+      return data || [];
+    },
+  });
+
+  const { data: classData } = useQuery({
+    queryKey: ["hoc-class-data", classId, selTerm, selType],
+    enabled: !!(classId && selTerm),
+    queryFn: async () => {
+      // All students in this class
+      const { data: students } = await supabase.from("students").select("*").eq("class_id", classId).order("full_name");
+      const studentList = students || [];
+      const studentIds = studentList.map((s: any) => s.id);
+
+      // All subjects for this class
+      const { data: subjectsRaw } = await supabase.from("subjects").select("id, name").eq("class_id", classId).order("name");
+      const subjects = subjectsRaw || [];
+      const subjectIds = subjects.map((s: any) => s.id);
+
+      // All results for these students + term + type
+      const { data: resultsRaw } = studentIds.length > 0
+        ? await supabase.from("results").select("*").in("student_id", studentIds).eq("term_id", selTerm).eq("result_type", selType)
+        : { data: [] };
+      const results = resultsRaw || [];
+
+      // Existing submissions
+      const { data: subs } = studentIds.length > 0
+        ? await supabase.from("report_submissions").select("*").in("student_id", studentIds).eq("term_id", selTerm).eq("result_type", selType)
+        : { data: [] };
+      const subMap: Record<string, any> = {};
+      (subs || []).forEach((s: any) => { subMap[s.student_id] = s; });
+
+      // Build per-student summary
+      const studentSummaries = studentList.map((student: any) => {
+        const studentResults = results.filter((r: any) => r.student_id === student.id);
+        const resultMap: Record<string, any> = {};
+        studentResults.forEach((r: any) => { resultMap[r.subject_id] = r; });
+        const uploaded = studentResults.length;
+        const total = subjects.length;
+        const submission = subMap[student.id] || null;
+        return { student, subjects, resultMap, uploaded, total, submission };
+      });
+
+      return { studentSummaries, subjects };
+    },
+  });
+
+  const submitReport = useMutation({
+    mutationFn: async ({ studentId, comment }: { studentId: string; comment: string }) => {
+      const { error } = await supabase.from("report_submissions").upsert({
+        student_id: studentId,
+        term_id: selTerm,
+        result_type: selType,
+        head_teacher_id: userId,
+        head_teacher_comment: comment,
+        status: "submitted",
+        submitted_at: new Date().toISOString(),
+      }, { onConflict: "student_id,term_id,result_type" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Report card submitted to admin" });
+      queryClient.invalidateQueries({ queryKey: ["hoc-class-data"] });
+      setReviewing(null);
+      setHeadComment("");
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const pending = classData?.studentSummaries?.filter((s: any) => !s.submission || s.submission.status === "draft").length || 0;
+  const submitted = classData?.studentSummaries?.filter((s: any) => s.submission?.status === "submitted").length || 0;
+
+  return (
+    <div className="bg-card rounded-xl p-5 shadow-card border-l-4 border-primary space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <ClipboardCheck size={18} className="text-primary" />
+          <h4 className="font-heading font-semibold text-foreground">
+            Class Report Cards — {headClasses.map((c: any) => c.name).join(", ")}
+          </h4>
+        </div>
+        <div className="flex gap-2">
+          {pending > 0 && (
+            <span className="flex items-center gap-1 text-xs bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full font-medium">
+              <Clock size={11} /> {pending} pending
+            </span>
+          )}
+          {submitted > 0 && (
+            <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-medium">
+              <CheckCircle size={11} /> {submitted} submitted
+            </span>
+          )}
+        </div>
+      </div>
+
+      <p className="text-sm text-muted-foreground">
+        Review all subject results for your class, add your comment, and submit each student's report card to the admin.
+      </p>
+
+      {/* Term + type selectors */}
+      <div className="flex flex-wrap gap-3 items-end">
+        <div className="flex-1 min-w-[180px]">
+          <Label className="text-xs mb-1 block">Term</Label>
+          <Select value={selTerm} onValueChange={setSelTerm}>
+            <SelectTrigger><SelectValue placeholder="Select term..." /></SelectTrigger>
+            <SelectContent>{terms?.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.name} ({t.academic_year})</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div className="flex gap-1 bg-muted rounded-lg p-1">
+          {(["mid_term", "end_of_term"] as const).map(t => (
+            <button key={t} onClick={() => setSelType(t)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${selType === t ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"}`}>
+              {t === "mid_term" ? "Mid Term" : "End of Term"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Student list */}
+      {selTerm && classData && (
+        <div className="space-y-2">
+          {classData.studentSummaries.map((item: any) => {
+            const { student, uploaded, total, submission } = item;
+            const isSubmitted = submission?.status === "submitted" || submission?.status === "approved";
+            const complete = uploaded >= total && total > 0;
+            return (
+              <div key={student.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
+                  {student.full_name?.[0]?.toUpperCase() || "?"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">{student.full_name}</p>
+                  <p className="text-xs text-muted-foreground">{uploaded}/{total} subjects uploaded</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isSubmitted
+                    ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle size={10} /> Submitted</span>
+                    : complete
+                      ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Ready</span>
+                      : <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Incomplete</span>
+                  }
+                  <Button size="sm" variant="outline" className="text-xs h-7"
+                    onClick={() => { setReviewing(item); setHeadComment(submission?.head_teacher_comment || ""); }}>
+                    {isSubmitted ? "View" : "Review & Submit"}
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Review dialog */}
+      <Dialog open={!!reviewing} onOpenChange={open => !open && setReviewing(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Report Card — {reviewing?.student?.full_name}</DialogTitle>
+          </DialogHeader>
+          {reviewing && (
+            <div className="space-y-4">
+              {/* Results table */}
+              <div className="border border-border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="text-left p-2.5 font-medium text-muted-foreground">Subject</th>
+                      <th className="text-center p-2.5 font-medium text-muted-foreground">Score /30</th>
+                      <th className="text-center p-2.5 font-medium text-muted-foreground">Grade</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reviewing.subjects.map((s: any) => {
+                      const r = reviewing.resultMap[s.id];
+                      const score = r ? Number(r.total_score) : null;
+                      const grade = r?.grade_letter || null;
+                      return (
+                        <tr key={s.id} className="border-t border-border">
+                          <td className="p-2.5 font-medium">{s.name}</td>
+                          <td className="p-2.5 text-center font-semibold">{score ?? <span className="text-amber-500 text-xs">Not uploaded</span>}</td>
+                          <td className="p-2.5 text-center">
+                            {grade
+                              ? <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: (GRADE_COLORS[grade] || "#6b7280") + "22", color: GRADE_COLORS[grade] || "#6b7280" }}>{grade}</span>
+                              : "—"
+                            }
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Summary */}
+              {(() => {
+                const scores = reviewing.subjects.map((s: any) => reviewing.resultMap[s.id]?.total_score).filter((v: any) => v != null).map(Number);
+                const total = scores.reduce((a: number, b: number) => a + b, 0);
+                const avg = scores.length > 0 ? (total / scores.length).toFixed(2) : "—";
+                return (
+                  <div className="bg-muted/40 rounded-lg p-3 text-sm grid grid-cols-3 gap-3 text-center">
+                    <div><p className="text-muted-foreground text-xs">Score Obtained</p><p className="font-bold text-foreground">{total} / {reviewing.subjects.length * 30}</p></div>
+                    <div><p className="text-muted-foreground text-xs">Average</p><p className="font-bold text-foreground">{avg}</p></div>
+                    <div><p className="text-muted-foreground text-xs">Subjects Uploaded</p><p className="font-bold text-foreground">{scores.length} / {reviewing.subjects.length}</p></div>
+                  </div>
+                );
+              })()}
+
+              {/* Head teacher comment */}
+              <div>
+                <Label className="text-sm font-medium">Your Comment (Head Teacher)</Label>
+                <Textarea
+                  value={headComment}
+                  onChange={e => setHeadComment(e.target.value)}
+                  placeholder="Write your comment on this student's overall performance..."
+                  rows={3}
+                  className="mt-1"
+                  disabled={reviewing?.submission?.status === "approved"}
+                />
+              </div>
+
+              {reviewing?.submission?.status !== "approved" && (
+                <Button className="w-full hero-gradient gap-2" onClick={() => submitReport.mutate({ studentId: reviewing.student.id, comment: headComment })} disabled={submitReport.isPending}>
+                  <Send size={15} /> {submitReport.isPending ? "Submitting..." : "Submit Report Card to Admin"}
+                </Button>
+              )}
+              {reviewing?.submission?.status === "approved" && (
+                <p className="text-center text-sm text-green-600 font-medium">✓ This report card has been approved by admin</p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

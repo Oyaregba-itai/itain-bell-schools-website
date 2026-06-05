@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle } from "lucide-react";
+import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle, Send, CheckCircle } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import MessagingView from "@/components/MessagingView";
@@ -136,6 +136,14 @@ const AdminOverview = () => {
 
   const unassigned = subjectCoverage?.find(s => s.name === "Unassigned")?.value || 0;
 
+  const { data: pendingSubmissions } = useQuery({
+    queryKey: ["pending-submissions-count"],
+    queryFn: async () => {
+      const { count } = await supabase.from("report_submissions").select("id", { count: "exact" }).eq("status", "submitted");
+      return count || 0;
+    },
+  });
+
   return (
     <div className="space-y-6">
       {/* Stats row */}
@@ -155,6 +163,12 @@ const AdminOverview = () => {
         <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
           <AlertCircle size={16} className="flex-shrink-0" />
           <span><strong>{unassigned} subject{unassigned !== 1 ? "s" : ""}</strong> still need a teacher assigned. Go to Subjects to fix this.</span>
+        </div>
+      )}
+      {(pendingSubmissions ?? 0) > 0 && (
+        <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
+          <ClipboardCheck size={16} className="flex-shrink-0" />
+          <span><strong>{pendingSubmissions} report card{pendingSubmissions !== 1 ? "s" : ""}</strong> submitted by class teachers and awaiting your approval. Go to <strong>All Results</strong> to review.</span>
         </div>
       )}
 
@@ -2404,6 +2418,103 @@ const getGradeLetterAdmin = (score: number): string => {
   return "E";
 };
 
+const SubmittedReportCards = () => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [previewSub, setPreviewSub] = useState<any | null>(null);
+
+  const { data: submissions } = useQuery({
+    queryKey: ["submitted-report-cards"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("report_submissions").select("*").eq("status", "submitted").order("submitted_at", { ascending: false });
+      if (error) throw error;
+      const rows = data || [];
+      const studentIds = [...new Set(rows.map((r: any) => r.student_id).filter(Boolean))];
+      const termIds = [...new Set(rows.map((r: any) => r.term_id).filter(Boolean))];
+      const headIds = [...new Set(rows.map((r: any) => r.head_teacher_id).filter(Boolean))];
+      const [sRes, tRes, hRes] = await Promise.all([
+        studentIds.length > 0 ? supabase.from("students").select("id, full_name").in("id", studentIds as string[]) : { data: [] },
+        termIds.length > 0 ? supabase.from("terms").select("id, name").in("id", termIds as string[]) : { data: [] },
+        headIds.length > 0 ? supabase.from("profiles").select("user_id, full_name").in("user_id", headIds as string[]) : { data: [] },
+      ]);
+      const sMap: Record<string, string> = {};
+      const tMap: Record<string, string> = {};
+      const hMap: Record<string, string> = {};
+      (sRes.data || []).forEach((s: any) => { sMap[s.id] = s.full_name; });
+      (tRes.data || []).forEach((t: any) => { tMap[t.id] = t.name; });
+      (hRes.data || []).forEach((h: any) => { hMap[h.user_id] = h.full_name; });
+      return rows.map((r: any) => ({ ...r, studentName: sMap[r.student_id] || "—", termName: tMap[r.term_id] || "—", headName: hMap[r.head_teacher_id] || "—" }));
+    },
+  });
+
+  const approveReport = useMutation({
+    mutationFn: async (id: string) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await supabase.from("report_submissions").update({ status: "approved", approved_at: new Date().toISOString(), approved_by: user?.id }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Report card approved and published to parents" });
+      queryClient.invalidateQueries({ queryKey: ["submitted-report-cards"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-submissions-count"] });
+      setPreviewSub(null);
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  if (!submissions?.length) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Send size={18} className="text-blue-600" />
+        <h3 className="text-lg font-heading text-foreground">Submitted Report Cards</h3>
+        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">{submissions.length} awaiting approval</span>
+      </div>
+
+      {previewSub && (
+        <ReportCard studentId={previewSub.student_id} termId={previewSub.term_id} resultType={previewSub.result_type} onClose={() => setPreviewSub(null)}>
+        </ReportCard>
+      )}
+
+      <div className="bg-card rounded-xl shadow-card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-muted">
+            <tr>
+              <th className="text-left p-3 font-medium text-muted-foreground">Student</th>
+              <th className="text-left p-3 font-medium text-muted-foreground">Term</th>
+              <th className="text-left p-3 font-medium text-muted-foreground">Type</th>
+              <th className="text-left p-3 font-medium text-muted-foreground">Submitted by</th>
+              <th className="text-left p-3 font-medium text-muted-foreground">Comment</th>
+              <th className="p-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {submissions.map((sub: any) => (
+              <tr key={sub.id} className="border-t border-border">
+                <td className="p-3 font-medium text-foreground">{sub.studentName}</td>
+                <td className="p-3 text-muted-foreground">{sub.termName}</td>
+                <td className="p-3 text-muted-foreground capitalize text-xs">{sub.result_type?.replace("_", " ")}</td>
+                <td className="p-3 text-muted-foreground text-xs">{sub.headName}</td>
+                <td className="p-3 text-muted-foreground text-xs max-w-xs truncate">{sub.head_teacher_comment || "—"}</td>
+                <td className="p-3">
+                  <div className="flex gap-2">
+                    <button onClick={() => setPreviewSub(sub)} className="text-xs text-primary hover:underline font-medium">Preview</button>
+                    <button onClick={() => approveReport.mutate(sub.id)} disabled={approveReport.isPending}
+                      className="flex items-center gap-1 text-xs bg-green-600 text-white px-2.5 py-1 rounded-lg hover:bg-green-700 transition-colors font-medium">
+                      <CheckCircle size={11} /> Approve
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 const LiveReportCardPreview = ({
   studentsWithResults, termsWithResults, allResults, onEditResult, onResultSaved,
 }: {
@@ -2668,6 +2779,9 @@ const ViewAllResults = () => {
           </div>}
         </DialogContent>
       </Dialog>
+
+      {/* ── Submitted Report Cards (from class teachers) ── */}
+      <SubmittedReportCards />
 
       {/* ── Live Report Card Preview ── */}
       <LiveReportCardPreview
