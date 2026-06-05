@@ -490,28 +490,38 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
   );
 };
 
+// Grade calculation based on percentage (works for any total score)
+const gradeFromPct = (pct: number) => {
+  if (pct >= 95) return { letter: "A+", remark: "Outstanding", color: "#7B2D8B" };
+  if (pct >= 90) return { letter: "A",  remark: "Outstanding", color: "#4a0e6e" };
+  if (pct >= 85) return { letter: "B+", remark: "Proficient",  color: "#166534" };
+  if (pct >= 80) return { letter: "B",  remark: "Proficient",  color: "#166534" };
+  if (pct >= 75) return { letter: "C+", remark: "Capable",     color: "#1e40af" };
+  if (pct >= 70) return { letter: "C",  remark: "Capable",     color: "#1e40af" };
+  if (pct >= 60) return { letter: "D",  remark: "PTE",         color: "#c2410c" };
+  return             { letter: "E",  remark: "NME",         color: "#b91c1c" };
+};
+
+const getGradeForScore = (score: number, outOf: number) =>
+  outOf > 0 ? gradeFromPct((score / outOf) * 100) : gradeFromPct(0);
+
 const UploadResults = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({
-    student_id: "",
-    subject_id: "",
-    term_id: "",
-    result_type: "mid_term" as "mid_term" | "end_of_term",
-    total_score: "",
-    teacher_comments: "",
-  });
+  const [selSubject, setSelSubject] = useState("");
+  const [selTerm, setSelTerm] = useState("");
+  const [selType, setSelType] = useState<"mid_term" | "end_of_term">("mid_term");
+  const [scores, setScores] = useState<Record<string, { score: string; comment: string }>>({});
+  const [saving, setSaving] = useState(false);
+
+  const outOf = selType === "mid_term" ? 30 : 70;
 
   const { data: subjects } = useQuery({
     queryKey: ["my-subjects", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      const { data, error } = await supabase
-        .from("subjects")
-        .select("*")
-        .eq("teacher_id", user.id);
-      if (error) throw error;
+      const { data } = await supabase.from("subjects").select("*").eq("teacher_id", user.id);
       return data || [];
     },
     enabled: !!user,
@@ -520,196 +530,218 @@ const UploadResults = () => {
   const { data: terms } = useQuery({
     queryKey: ["terms"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("terms").select("*");
-      if (error) throw error;
+      const { data } = await supabase.from("terms").select("*").order("created_at");
       return data || [];
     },
   });
 
-  // Get students for the selected subject's class
-  const selectedSubject = subjects?.find((s: any) => s.id === form.subject_id);
-  const { data: students } = useQuery({
-    queryKey: ["class-students", selectedSubject?.class_id],
+  const selectedSubject = subjects?.find((s: any) => s.id === selSubject);
+
+  const { data: classData } = useQuery({
+    queryKey: ["upload-class-data", selSubject, selTerm, selType],
+    enabled: !!(selSubject && selTerm),
     queryFn: async () => {
-      if (!selectedSubject?.class_id) return [];
-      const { data, error } = await supabase
-        .from("students")
-        .select("*")
-        .eq("class_id", selectedSubject.class_id);
-      if (error) throw error;
-      return data || [];
+      const { data: students } = await supabase.from("students").select("*").eq("class_id", selectedSubject?.class_id).order("full_name");
+      const studentList = students || [];
+      const studentIds = studentList.map((s: any) => s.id);
+      const { data: existing } = studentIds.length > 0
+        ? await supabase.from("results").select("*").eq("subject_id", selSubject).eq("term_id", selTerm).eq("result_type", selType).in("student_id", studentIds)
+        : { data: [] };
+      const existingMap: Record<string, any> = {};
+      (existing || []).forEach((r: any) => { existingMap[r.student_id] = r; });
+      return { students: studentList, existingMap };
     },
-    enabled: !!selectedSubject?.class_id,
   });
 
-  const getGradeLetter = (score: number): string => {
-    if (score >= 28.5) return "A+";
-    if (score >= 27.0) return "A";
-    if (score >= 25.5) return "B+";
-    if (score >= 24.0) return "B";
-    if (score >= 22.5) return "C+";
-    if (score >= 21.0) return "C";
-    if (score >= 18.0) return "D";
-    return "E";
-  };
+  // Initialise scores when data loads
+  const initDone = !!(classData && selSubject && selTerm);
 
-  const getGradeRemark = (score: number): string => {
-    if (score >= 27.0) return "Outstanding";
-    if (score >= 24.0) return "Proficient";
-    if (score >= 21.0) return "Capable";
-    if (score >= 18.0) return "PTE";
-    return "NME";
-  };
-
-  const score = parseFloat(form.total_score) || 0;
-  const previewGrade = form.total_score ? getGradeLetter(score) : null;
-  const previewRemark = form.total_score ? getGradeRemark(score) : null;
-
-  const upload = useMutation({
-    mutationFn: async () => {
-      const totalScore = parseFloat(form.total_score) || 0;
-      const { error } = await supabase.from("results").insert([
-        {
-          student_id: form.student_id,
-          subject_id: form.subject_id,
-          term_id: form.term_id,
-          result_type: form.result_type,
-          total_score: totalScore,
-          grade_letter: getGradeLetter(totalScore),
-          teacher_comments: form.teacher_comments || null,
-          uploaded_by: user!.id,
-        },
-      ]);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "Result uploaded successfully" });
+  const saveAll = async () => {
+    if (!user || !classData) return;
+    setSaving(true);
+    let saved = 0, errors = 0;
+    for (const student of classData.students) {
+      const entry = scores[student.id];
+      if (!entry?.score) continue;
+      const scoreVal = parseFloat(entry.score);
+      if (isNaN(scoreVal)) continue;
+      const grade = getGradeForScore(scoreVal, outOf);
+      const existing = classData.existingMap[student.id];
+      try {
+        if (existing) {
+          await supabase.from("results").update({
+            total_score: scoreVal,
+            grade_letter: grade.letter,
+            teacher_comments: entry.comment || null,
+          }).eq("id", existing.id);
+        } else {
+          await supabase.from("results").insert({
+            student_id: student.id,
+            subject_id: selSubject,
+            term_id: selTerm,
+            result_type: selType,
+            total_score: scoreVal,
+            grade_letter: grade.letter,
+            teacher_comments: entry.comment || null,
+            uploaded_by: user.id,
+          });
+        }
+        saved++;
+      } catch { errors++; }
+    }
+    setSaving(false);
+    if (saved > 0) {
+      toast({ title: `${saved} result${saved !== 1 ? "s" : ""} saved successfully` });
+      queryClient.invalidateQueries({ queryKey: ["upload-class-data"] });
       queryClient.invalidateQueries({ queryKey: ["my-results"] });
-      setForm({
-        student_id: "",
-        subject_id: form.subject_id,
-        term_id: form.term_id,
-        result_type: form.result_type,
-        total_score: "",
-        teacher_comments: "",
-      });
-    },
-    onError: (err: Error) =>
-      toast({ title: "Error", description: err.message, variant: "destructive" }),
-  });
+      queryClient.invalidateQueries({ queryKey: ["teacher-overview"] });
+    }
+    if (errors > 0) toast({ title: "Some results failed to save", variant: "destructive" } as any);
+  };
+
+  const filledCount = Object.values(scores).filter(s => s.score).length;
 
   return (
-    <div className="max-w-2xl">
-      <h3 className="text-lg font-heading text-foreground mb-6">Upload Result</h3>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          upload.mutate();
-        }}
-        className="bg-card rounded-xl p-6 shadow-card space-y-4"
-      >
-        <div className="grid grid-cols-2 gap-4">
+    <div className="space-y-6">
+      <h3 className="text-lg font-heading text-foreground">Upload Results</h3>
+
+      {/* Selectors */}
+      <div className="bg-card rounded-xl p-5 shadow-card space-y-4">
+        <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <Label>Subject *</Label>
-            <Select
-              value={form.subject_id}
-              onValueChange={(v) => setForm({ ...form, subject_id: v, student_id: "" })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select subject" />
-              </SelectTrigger>
+            <Select value={selSubject} onValueChange={v => { setSelSubject(v); setScores({}); }}>
+              <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
               <SelectContent>
-                {subjects?.map((s: any) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
+                {subjects?.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
           <div>
             <Label>Term *</Label>
-            <Select value={form.term_id} onValueChange={(v) => setForm({ ...form, term_id: v })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select term" />
-              </SelectTrigger>
+            <Select value={selTerm} onValueChange={v => { setSelTerm(v); setScores({}); }}>
+              <SelectTrigger><SelectValue placeholder="Select term" /></SelectTrigger>
               <SelectContent>
-                {terms?.map((t: any) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
+                {terms?.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.name} ({t.academic_year})</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
         </div>
 
-        <div>
-          <Label>Student *</Label>
-          <Select value={form.student_id} onValueChange={(v) => setForm({ ...form, student_id: v })}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select student" />
-            </SelectTrigger>
-            <SelectContent>
-              {students?.map((s: any) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.first_name} {s.last_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
+          {(["mid_term", "end_of_term"] as const).map(t => (
+            <button key={t} onClick={() => { setSelType(t); setScores({}); }}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${selType === t ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              {t === "mid_term" ? "Mid Term (out of 30)" : "End of Term (out of 70)"}
+            </button>
+          ))}
         </div>
 
-        <div>
-          <Label>Result Type *</Label>
-          <Select
-            value={form.result_type}
-            onValueChange={(v) => setForm({ ...form, result_type: v as "mid_term" | "end_of_term" })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select result type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="mid_term">Mid Term</SelectItem>
-              <SelectItem value="end_of_term">End of Term</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {selectedSubject && selTerm && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+            <BookOpen size={13} className="text-primary" />
+            <span>Entering <strong>{selType === "mid_term" ? "Mid Term" : "End of Term"}</strong> scores for <strong>{selectedSubject?.name}</strong> — max <strong>{outOf}</strong> per student</span>
+          </div>
+        )}
+      </div>
 
-        <div>
-          <Label>Score (out of 30) *</Label>
-          <Input
-            type="number"
-            step="0.5"
-            min="0"
-            max="30"
-            value={form.total_score}
-            onChange={(e) => setForm({ ...form, total_score: e.target.value })}
-            placeholder="e.g. 27.5"
-          />
-          {previewGrade && (
-            <p className="text-xs mt-1 font-semibold" style={{
-              color: score >= 27 ? "#7B2D8B" : score >= 24 ? "#166534" : score >= 21 ? "#1e40af" : score >= 18 ? "#c2410c" : "#b91c1c"
-            }}>
-              Grade: {previewGrade} — {previewRemark}
-            </p>
-          )}
-        </div>
+      {/* Batch entry table */}
+      {classData && classData.students.length > 0 && (
+        <div className="bg-card rounded-xl shadow-card overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+            <div>
+              <p className="font-heading font-semibold text-foreground">
+                {selectedSubject?.name} — {selType === "mid_term" ? "Mid Term" : "End of Term"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">{classData.students.length} students · {filledCount} scores entered</p>
+            </div>
+            <Button className="hero-gradient gap-2" onClick={saveAll} disabled={saving || filledCount === 0}>
+              {saving ? "Saving..." : `Save ${filledCount > 0 ? `(${filledCount})` : "All"} Results`}
+            </Button>
+          </div>
 
-        <div>
-          <Label>Teacher Comment (optional)</Label>
-          <Textarea
-            value={form.teacher_comments}
-            onChange={(e) => setForm({ ...form, teacher_comments: e.target.value })}
-            placeholder="e.g. Fantastic progress! Keep it up."
-            rows={2}
-          />
-        </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted">
+                <tr>
+                  <th className="text-left p-3 font-medium text-muted-foreground">Student</th>
+                  <th className="text-center p-3 font-medium text-muted-foreground w-36">Score /{outOf}</th>
+                  <th className="text-center p-3 font-medium text-muted-foreground w-20">Grade</th>
+                  <th className="text-left p-3 font-medium text-muted-foreground">Comment (optional)</th>
+                  <th className="text-center p-3 font-medium text-muted-foreground w-20">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {classData.students.map((student: any) => {
+                  const existing = classData.existingMap[student.id];
+                  const entry = scores[student.id] || { score: existing ? String(existing.total_score) : "", comment: existing?.teacher_comments || "" };
+                  const scoreNum = parseFloat(entry.score) || 0;
+                  const grade = entry.score ? getGradeForScore(scoreNum, outOf) : null;
+                  const isDirty = entry.score && (String(scoreNum) !== String(existing?.total_score ?? "") || entry.comment !== (existing?.teacher_comments ?? ""));
+                  return (
+                    <tr key={student.id} className={`border-t border-border transition-colors ${isDirty ? "bg-primary/5" : ""}`}>
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
+                            {student.full_name?.[0]?.toUpperCase()}
+                          </div>
+                          <span className="font-medium text-foreground">{student.full_name}</span>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <Input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          max={outOf}
+                          value={entry.score}
+                          onChange={e => setScores(prev => ({ ...prev, [student.id]: { ...entry, score: e.target.value } }))}
+                          className="h-8 text-sm text-center w-full"
+                          placeholder={`0–${outOf}`}
+                        />
+                      </td>
+                      <td className="p-3 text-center">
+                        {grade
+                          ? <span className="text-sm font-bold" style={{ color: grade.color }}>{grade.letter}</span>
+                          : <span className="text-muted-foreground text-xs">—</span>
+                        }
+                      </td>
+                      <td className="p-3">
+                        <Input
+                          value={entry.comment}
+                          onChange={e => setScores(prev => ({ ...prev, [student.id]: { ...entry, comment: e.target.value } }))}
+                          className="h-8 text-xs"
+                          placeholder="Optional comment..."
+                        />
+                      </td>
+                      <td className="p-3 text-center">
+                        {existing && !isDirty
+                          ? <span className="text-xs text-green-600 flex items-center justify-center gap-1"><CheckCircle size={12} /> Saved</span>
+                          : isDirty
+                            ? <span className="text-xs text-amber-600 font-medium">Unsaved</span>
+                            : <span className="text-xs text-muted-foreground">—</span>
+                        }
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
-        <Button type="submit" className="w-full hero-gradient" disabled={upload.isPending || !form.student_id}>
-          {upload.isPending ? "Uploading..." : "Upload Result"}
-        </Button>
-      </form>
+          <div className="px-5 py-3 border-t border-border flex justify-end">
+            <Button className="hero-gradient gap-2" onClick={saveAll} disabled={saving || filledCount === 0}>
+              {saving ? "Saving..." : `Save ${filledCount > 0 ? `${filledCount} Result${filledCount !== 1 ? "s" : ""}` : "Results"}`}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {selSubject && selTerm && classData?.students.length === 0 && (
+        <div className="bg-card rounded-xl p-8 shadow-card text-center text-muted-foreground text-sm">
+          No students found in this class.
+        </div>
+      )}
     </div>
   );
 };
