@@ -2886,15 +2886,17 @@ const ViewAllResults = () => {
   );
 };
 
-const fmt = (n: number) => `₦${n.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmt = (n: number) => `₦${Number(n).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const NONE = "__none__"; // sentinel for "no selection" in Select components
 
 const FinancesView = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<"overview" | "fees" | "payments" | "record">("overview");
-  const [feeForm, setFeeForm] = useState({ name: "", amount: "", class_id: "", term_id: "", fee_type: "tuition", description: "" });
-  const [payForm, setPayForm] = useState({ student_id: "", fee_structure_id: "", amount: "", payment_date: new Date().toISOString().split("T")[0], payment_method: "cash", receipt_number: "", notes: "" });
+  const [feeForm, setFeeForm] = useState({ name: "", amount: "", class_id: NONE, term_id: NONE, fee_type: "tuition", description: "" });
+  const [payForm, setPayForm] = useState({ student_id: "", fee_structure_id: NONE, amount: "", payment_date: new Date().toISOString().split("T")[0], payment_method: "cash", receipt_number: "", notes: "" });
   const [editingFee, setEditingFee] = useState<any | null>(null);
 
   const { data: terms } = useQuery({ queryKey: ["terms"], queryFn: async () => { const { data } = await supabase.from("terms").select("*").order("created_at"); return data || []; } });
@@ -2942,17 +2944,22 @@ const FinancesView = () => {
   });
 
   const totalCollected = (payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
-  const totalFees = (feeStructures || []).reduce((s: number, f: any) => s + Number(f.amount), 0);
 
   const addFee = useMutation({
     mutationFn: async () => {
+      const amt = parseFloat(feeForm.amount);
+      if (isNaN(amt) || amt <= 0) throw new Error("Please enter a valid amount");
       const { error } = await supabase.from("fee_structures").insert([{
-        name: feeForm.name, amount: parseFloat(feeForm.amount), class_id: feeForm.class_id || null,
-        term_id: feeForm.term_id || null, fee_type: feeForm.fee_type, description: feeForm.description || null,
+        name: feeForm.name.trim(),
+        amount: amt,
+        class_id: feeForm.class_id === NONE ? null : feeForm.class_id,
+        term_id: feeForm.term_id === NONE ? null : feeForm.term_id,
+        fee_type: feeForm.fee_type,
+        description: feeForm.description.trim() || null,
       }]);
       if (error) throw error;
     },
-    onSuccess: () => { toast({ title: "Fee structure added" }); queryClient.invalidateQueries({ queryKey: ["fee-structures"] }); setFeeForm({ name: "", amount: "", class_id: "", term_id: "", fee_type: "tuition", description: "" }); },
+    onSuccess: () => { toast({ title: "Fee structure added" }); queryClient.invalidateQueries({ queryKey: ["fee-structures"] }); setFeeForm({ name: "", amount: "", class_id: NONE, term_id: NONE, fee_type: "tuition", description: "" }); },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
@@ -2973,19 +2980,26 @@ const FinancesView = () => {
 
   const recordPayment = useMutation({
     mutationFn: async () => {
-      const { data: { user: u } } = await supabase.auth.getUser();
+      const amt = parseFloat(payForm.amount);
+      if (isNaN(amt) || amt <= 0) throw new Error("Please enter a valid amount");
+      if (!payForm.student_id) throw new Error("Please select a student");
       const { error } = await supabase.from("payments").insert([{
-        student_id: payForm.student_id, fee_structure_id: payForm.fee_structure_id || null,
-        amount: parseFloat(payForm.amount), payment_date: payForm.payment_date,
-        payment_method: payForm.payment_method, receipt_number: payForm.receipt_number || null,
-        notes: payForm.notes || null, recorded_by: u?.id,
+        student_id: payForm.student_id,
+        fee_structure_id: payForm.fee_structure_id === NONE ? null : payForm.fee_structure_id,
+        amount: amt,
+        payment_date: payForm.payment_date,
+        payment_method: payForm.payment_method,
+        receipt_number: payForm.receipt_number.trim() || null,
+        notes: payForm.notes.trim() || null,
+        recorded_by: user?.id || null,
       }]);
       if (error) throw error;
     },
     onSuccess: () => {
       toast({ title: "Payment recorded successfully" });
       queryClient.invalidateQueries({ queryKey: ["all-payments"] });
-      setPayForm({ student_id: "", fee_structure_id: "", amount: "", payment_date: new Date().toISOString().split("T")[0], payment_method: "cash", receipt_number: "", notes: "" });
+      queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
+      setPayForm({ student_id: "", fee_structure_id: NONE, amount: "", payment_date: new Date().toISOString().split("T")[0], payment_method: "cash", receipt_number: "", notes: "" });
       setTab("payments");
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
@@ -3101,13 +3115,13 @@ const FinancesView = () => {
               <div><Label>Class (optional)</Label>
                 <Select value={feeForm.class_id} onValueChange={v => setFeeForm({ ...feeForm, class_id: v })}>
                   <SelectTrigger><SelectValue placeholder="All classes" /></SelectTrigger>
-                  <SelectContent><SelectItem value="">All classes</SelectItem>{classes?.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                  <SelectContent><SelectItem value={NONE}>All classes</SelectItem>{classes?.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div><Label>Term (optional)</Label>
                 <Select value={feeForm.term_id} onValueChange={v => setFeeForm({ ...feeForm, term_id: v })}>
                   <SelectTrigger><SelectValue placeholder="All terms" /></SelectTrigger>
-                  <SelectContent><SelectItem value="">All terms</SelectItem>{terms?.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
+                  <SelectContent><SelectItem value={NONE}>All terms</SelectItem>{terms?.map((t: any) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div><Label>Fee Type</Label>
@@ -3203,9 +3217,15 @@ const FinancesView = () => {
                 </Select>
               </div>
               <div><Label>Fee Structure (optional)</Label>
-                <Select value={payForm.fee_structure_id} onValueChange={v => { setPayForm({ ...payForm, fee_structure_id: v, amount: feeStructures?.find((f: any) => f.id === v)?.amount?.toString() || payForm.amount }); }}>
-                  <SelectTrigger><SelectValue placeholder="Select fee" /></SelectTrigger>
-                  <SelectContent><SelectItem value="">— Custom amount —</SelectItem>{feeStructures?.map((f: any) => <SelectItem key={f.id} value={f.id}>{f.name} ({fmt(f.amount)})</SelectItem>)}</SelectContent>
+                <Select value={payForm.fee_structure_id} onValueChange={v => {
+                  const matched = feeStructures?.find((f: any) => f.id === v);
+                  setPayForm({ ...payForm, fee_structure_id: v, amount: matched ? String(matched.amount) : payForm.amount });
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Select fee or leave blank" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>— Custom / no fee selected —</SelectItem>
+                    {feeStructures?.map((f: any) => <SelectItem key={f.id} value={f.id}>{f.name} · {fmt(f.amount)}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
             </div>
