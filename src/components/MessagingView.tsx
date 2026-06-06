@@ -92,6 +92,24 @@ const DirectMessages = () => {
       if (!selectedUser?.user_id || !messageText.trim()) return;
       const { error } = await supabase.from("messages").insert({ sender_id: user!.id, recipient_id: selectedUser.user_id, content: messageText });
       if (error) throw error;
+
+      // Send email notification to recipient
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const { data: senderProfile } = await supabase.from("profiles").select("full_name").eq("user_id", user!.id).single();
+        if (session) {
+          await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-notification`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({
+              type: "messages",
+              title: `New message from ${senderProfile?.full_name || "a staff member"}`,
+              body: messageText.length > 200 ? messageText.substring(0, 200) + "…" : messageText,
+              recipients: [selectedUser.user_id],
+            }),
+          });
+        }
+      } catch { /* silent fail */ }
     },
     onSuccess: () => {
       setMessageText("");

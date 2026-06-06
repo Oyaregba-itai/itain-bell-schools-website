@@ -20,6 +20,7 @@ import ReportCard from "@/components/ReportCard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 
 const AdminDashboard = () => {
+  const { isSuperAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
 
   return (
@@ -33,7 +34,7 @@ const AdminDashboard = () => {
       {activeTab === "terms" && <ManageTerms />}
       {activeTab === "admissions" && <ManageAdmissions />}
       {activeTab === "events" && <ManageEvents />}
-      {activeTab === "results" && <ViewAllResults />}
+      {activeTab === "results" && <ViewAllResults isSuperAdmin={isSuperAdmin} />}
       {activeTab === "finances" && <FinancesView />}
       {activeTab === "announcements" && <AnnouncementsView />}
       {activeTab === "timetable" && <TimetableView />}
@@ -352,7 +353,7 @@ const ManageUsers = () => {
 };
 
 const UserList = ({ onView }: { onView: (user: any) => void }) => {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isSuperAdmin } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -692,7 +693,7 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
                   <button onClick={() => setEditing({ ...user })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button>
                 </td>
                 <td className="p-3">
-                  {user.user_id !== currentUser?.id && (
+                  {isSuperAdmin && user.user_id !== currentUser?.id && (
                     <button
                       onClick={() => {
                         if (confirm(`Delete ${user.full_name}? This cannot be undone.`))
@@ -2091,10 +2092,30 @@ const ManageAdmissions = () => {
         updated_at: new Date().toISOString(),
       }).eq("id", id);
       if (error) throw error;
+
+      // Auto-create student record when approved
+      if (status === "approved" && selected) {
+        const nameParts = (selected.child_full_name || "").trim().split(" ");
+        const firstName = nameParts[0] || selected.child_full_name;
+        const lastName = nameParts.slice(1).join(" ") || "";
+        await supabase.from("students").insert([{
+          full_name: selected.child_full_name,
+          first_name: firstName,
+          last_name: lastName,
+          gender: selected.gender || null,
+          date_of_birth: selected.date_of_birth || null,
+          school_section: selected.school_section || null,
+        }]);
+      }
     },
     onSuccess: (_, vars) => {
-      toast({ title: `Application ${vars.status}` });
+      if (vars.status === "approved") {
+        toast({ title: "Application approved — student record created automatically" });
+      } else {
+        toast({ title: `Application ${vars.status}` });
+      }
       queryClient.invalidateQueries({ queryKey: ["admission-applications"] });
+      queryClient.invalidateQueries({ queryKey: ["all-students"] });
       setSelected(null);
       setNotes("");
     },
@@ -2242,6 +2263,7 @@ const ManageAdmissions = () => {
 const EVENT_TYPES = ["holiday", "school_event", "sports_day", "exam", "parent_meeting", "other"] as const;
 
 const ManageEvents = () => {
+  const { isSuperAdmin } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [newEvent, setNewEvent] = useState({
@@ -2443,7 +2465,7 @@ const ManageEvents = () => {
                       description: event.description || "",
                       location: event.location || "",
                     })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button>
-                    <button onClick={() => { if (confirm("Delete this event?")) deleteEvent.mutate(event.id); }} className="text-destructive hover:opacity-70 transition-opacity"><Trash2 size={15} /></button>
+                    {isSuperAdmin && <button onClick={() => { if (confirm("Delete this event?")) deleteEvent.mutate(event.id); }} className="text-destructive hover:opacity-70 transition-opacity"><Trash2 size={15} /></button>}
                   </div>
                 </td>
               </tr>
@@ -2500,13 +2522,34 @@ const SubmittedReportCards = () => {
   });
 
   const approveReport = useMutation({
-    mutationFn: async (id: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await supabase.from("report_submissions").update({ status: "approved", approved_at: new Date().toISOString(), approved_by: user?.id }).eq("id", id);
+    mutationFn: async (sub: any) => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      const { error } = await supabase.from("report_submissions").update({ status: "approved", approved_at: new Date().toISOString(), approved_by: u?.id }).eq("id", sub.id);
       if (error) throw error;
+
+      // Notify parents via email
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          const { data: links } = await supabase.from("parent_students").select("parent_id").eq("student_id", sub.student_id);
+          const recipients = (links || []).map((l: any) => l.parent_id);
+          if (recipients.length > 0) {
+            await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-notification`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+              body: JSON.stringify({
+                type: "results",
+                title: `${sub.studentName}'s Report Card is Ready`,
+                body: `The ${sub.termName} ${sub.result_type === "mid_term" ? "Mid Term" : "End of Term"} report card for ${sub.studentName} has been approved and is now available in your parent portal.`,
+                recipients,
+              }),
+            });
+          }
+        }
+      } catch { /* silent fail */ }
     },
     onSuccess: () => {
-      toast({ title: "Report card approved and published to parents" });
+      toast({ title: "Report card approved — parents notified" });
       queryClient.invalidateQueries({ queryKey: ["submitted-report-cards"] });
       queryClient.invalidateQueries({ queryKey: ["pending-submissions-count"] });
       setPreviewSub(null);
@@ -2551,7 +2594,7 @@ const SubmittedReportCards = () => {
                 <td className="p-3">
                   <div className="flex gap-2">
                     <button onClick={() => setPreviewSub(sub)} className="text-xs text-primary hover:underline font-medium">Preview</button>
-                    <button onClick={() => approveReport.mutate(sub.id)} disabled={approveReport.isPending}
+                    <button onClick={() => approveReport.mutate(sub)} disabled={approveReport.isPending}
                       className="flex items-center gap-1 text-xs bg-green-600 text-white px-2.5 py-1 rounded-lg hover:bg-green-700 transition-colors font-medium">
                       <CheckCircle size={11} /> Approve
                     </button>
@@ -2698,7 +2741,7 @@ const LiveReportCardPreview = ({
   );
 };
 
-const ViewAllResults = () => {
+const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [reportCard, setReportCard] = useState<{ studentId: string; termId: string; resultType: "mid_term" | "end_of_term" } | null>(null);
@@ -2904,7 +2947,7 @@ const ViewAllResults = () => {
                   <td className="p-3">
                     <div className="flex items-center gap-3">
                       <button onClick={() => setEditing({ ...result })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button>
-                      <button onClick={() => { if (confirm("Delete this result?")) deleteResult.mutate(result.id); }} className="text-destructive hover:opacity-70 transition-opacity"><Trash2 size={14} /></button>
+                      {isSuperAdmin && <button onClick={() => { if (confirm("Delete this result?")) deleteResult.mutate(result.id); }} className="text-destructive hover:opacity-70 transition-opacity"><Trash2 size={14} /></button>}
                     </div>
                   </td>
                 </tr>
@@ -2925,7 +2968,7 @@ const fmt = (n: number) => `₦${Number(n).toLocaleString("en-NG", { minimumFrac
 const NONE = "__none__"; // sentinel for "no selection" in Select components
 
 const FinancesView = () => {
-  const { user } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<"overview" | "fees" | "payments" | "record">("overview");
@@ -3190,7 +3233,7 @@ const FinancesView = () => {
                     <td className="p-3 text-muted-foreground text-xs">{f.termName}</td>
                     <td className="p-3"><div className="flex gap-3">
                       <button onClick={() => setEditingFee({ ...f })} className="text-muted-foreground hover:text-primary"><Pencil size={14} /></button>
-                      <button onClick={() => { if (confirm("Delete this fee structure?")) deleteFee.mutate(f.id); }} className="text-destructive hover:opacity-70"><Trash2 size={14} /></button>
+                      {isSuperAdmin && <button onClick={() => { if (confirm("Delete this fee structure?")) deleteFee.mutate(f.id); }} className="text-destructive hover:opacity-70"><Trash2 size={14} /></button>}
                     </div></td>
                   </tr>
                 ))}
@@ -3228,7 +3271,7 @@ const FinancesView = () => {
                     <td className="p-3 text-muted-foreground">{new Date(p.payment_date).toLocaleDateString("en-GB")}</td>
                     <td className="p-3 text-muted-foreground capitalize">{p.payment_method?.replace("_", " ")}</td>
                     <td className="p-3 text-muted-foreground text-xs">{p.receipt_number || "—"}</td>
-                    <td className="p-3"><button onClick={() => { if (confirm("Delete this payment record?")) deletePayment.mutate(p.id); }} className="text-destructive hover:opacity-70"><Trash2 size={14} /></button></td>
+                    <td className="p-3">{isSuperAdmin && <button onClick={() => { if (confirm("Delete this payment record?")) deletePayment.mutate(p.id); }} className="text-destructive hover:opacity-70"><Trash2 size={14} /></button>}</td>
                   </tr>
                 ))}
                 {!payments?.length && <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No payments recorded yet.</td></tr>}

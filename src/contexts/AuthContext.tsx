@@ -12,12 +12,14 @@ interface Profile {
   phone?: string;
   profile_picture_url?: string;
   created_at?: string;
+  is_super_admin?: boolean;
 }
 
 interface AuthContextType {
   user: SupabaseUser | null;
   role: AppRole | null;
   profile: Profile | null;
+  isSuperAdmin: boolean;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -29,6 +31,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(true);
   const [loading, setLoading] = useState(true);
 
   const fetchUserData = async (userId: string, userEmail: string) => {
@@ -79,15 +82,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       const userRole = roleData.role as AppRole;
       console.log("Setting user role:", userRole);
+      const superAdmin = profileData.is_super_admin !== false; // defaults to true
       setProfile({
         id: profileData.id,
         full_name: profileData.full_name,
         email: userEmail,
         role: userRole,
         phone: profileData.phone,
+        profile_picture_url: profileData.profile_picture_url,
         created_at: profileData.created_at,
+        is_super_admin: superAdmin,
       });
       setRole(userRole);
+      setIsSuperAdmin(superAdmin);
       setLoading(false);
     } catch (error) {
       console.error("Error fetching user data:", error);
@@ -137,13 +144,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(null);
       setRole(null);
       setProfile(null);
+      setIsSuperAdmin(true);
     } catch (error) {
       console.error("Error signing out:", error);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, profile, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, role, profile, isSuperAdmin, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

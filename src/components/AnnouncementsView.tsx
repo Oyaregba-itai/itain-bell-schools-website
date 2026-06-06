@@ -31,6 +31,26 @@ const AnnouncementsView = () => {
     },
   });
 
+  const sendEmailNotifications = async (title: string, content: string, targetRole: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      // Get recipient user_ids based on target role
+      let query = supabase.from("user_roles").select("user_id");
+      if (targetRole !== "all") query = query.eq("role", targetRole);
+      const { data: roleData } = await query;
+      const recipients = (roleData || []).map((r: any) => r.user_id);
+      if (!recipients.length) return;
+
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-notification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ type: "announcements", title, body: content, recipients }),
+      });
+    } catch { /* silent fail - notification is non-critical */ }
+  };
+
   const create = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("announcements").insert({
@@ -41,6 +61,8 @@ const AnnouncementsView = () => {
         created_at: new Date().toISOString(),
       });
       if (error) throw error;
+      // Send email notifications in background
+      sendEmailNotifications(form.title, form.content, form.target_role);
     },
     onSuccess: () => {
       toast({ title: "Announcement posted" });
