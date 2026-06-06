@@ -4,6 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
 import { GraduationCap, Printer } from "lucide-react";
+
+const getHour = () => new Date().getHours();
+const greeting = () => getHour() < 12 ? "Good morning" : getHour() < 17 ? "Good afternoon" : "Good evening";
+const extractFirstName = (fullName?: string | null) =>
+  fullName ? fullName.replace(/^(Mrs?\.?|Miss|Ms\.?|Dr\.?|Coach)\s+/i, "").split(" ")[0] : "there";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import EventsView from "@/components/EventsView";
@@ -28,7 +33,8 @@ const ParentDashboard = () => {
 };
 
 const ParentOverview = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const firstName = extractFirstName(profile?.full_name);
 
   const { data: allData } = useQuery({
     queryKey: ["my-children", user?.id],
@@ -71,8 +77,22 @@ const ParentOverview = () => {
   const classesMap = allData?.classesMap || new Map();
 
   return (
-    <div>
-      <h3 className="text-lg font-heading text-foreground mb-6">My Children</h3>
+    <div className="space-y-6">
+      {/* Welcome banner */}
+      <div className="hero-gradient rounded-xl p-5 shadow-card flex items-center gap-4 text-primary-foreground">
+        <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0">
+          {profile?.profile_picture_url
+            ? <img src={profile.profile_picture_url} className="w-full h-full rounded-full object-cover" alt="" />
+            : firstName[0]?.toUpperCase()
+          }
+        </div>
+        <div>
+          <p className="text-lg font-heading">{greeting()}, {firstName}!</p>
+          <p className="text-sm opacity-80">Parent / Guardian</p>
+        </div>
+      </div>
+
+      <h3 className="text-lg font-heading text-foreground">My Children</h3>
       <div className="grid gap-4 md:grid-cols-2">
         {children?.map((child: any) => {
           const className = classesMap.get(child?.class_id)?.name;
