@@ -68,7 +68,7 @@ const HeroSection = () => {
 
           <div className="flex flex-wrap gap-4 pt-2">
             <a
-              href="#admissions"
+              href="/admissions"
               className="px-7 py-3.5 rounded-lg hero-gradient text-primary-foreground font-semibold hover:opacity-90 transition-opacity shadow-elevated"
             >
               Apply Now
