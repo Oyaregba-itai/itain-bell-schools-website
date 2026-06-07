@@ -13,6 +13,7 @@ interface Profile {
   profile_picture_url?: string;
   created_at?: string;
   is_super_admin?: boolean;
+  is_finance_head?: boolean;
 }
 
 interface AuthContextType {
@@ -92,6 +93,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         profile_picture_url: profileData.profile_picture_url,
         created_at: profileData.created_at,
         is_super_admin: superAdmin,
+        is_finance_head: profileData.is_finance_head === true,
       });
       setRole(userRole);
       setIsSuperAdmin(superAdmin);

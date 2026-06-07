@@ -17,14 +17,36 @@ import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import MessagingView from "@/components/MessagingView";
 import ReportCard from "@/components/ReportCard";
+import { MySubjectsView, UploadResults, MyResults } from "@/pages/TeacherDashboard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 
 const AdminDashboard = () => {
-  const { isSuperAdmin } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
 
+  // Some admins (e.g. Mrs Duru) also teach subjects — give them a hybrid
+  // portal that combines admin tools with their personal teaching tabs.
+  const { data: ownSubjects } = useQuery({
+    queryKey: ["admin-own-subjects", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data } = await supabase.from("subjects").select("id").eq("teacher_id", user.id);
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  const teachesSubjects = (ownSubjects?.length ?? 0) > 0;
+  const extraTabs = teachesSubjects
+    ? [
+        { id: "my-subjects", label: "My Subjects", icon: BookOpen },
+        { id: "upload", label: "Upload Results", icon: Upload },
+        { id: "my-results", label: "My Results", icon: BarChart3 },
+      ]
+    : [];
+
   return (
-    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
+    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} extraTabs={extraTabs}>
       {activeTab === "overview" && <AdminOverview />}
       {activeTab === "profile" && <ProfilePage />}
       {activeTab === "users" && <ManageUsers />}
@@ -39,6 +61,9 @@ const AdminDashboard = () => {
       {activeTab === "announcements" && <AnnouncementsView />}
       {activeTab === "timetable" && <TimetableView />}
       {activeTab === "messaging" && <MessagingView />}
+      {activeTab === "my-subjects" && teachesSubjects && <MySubjectsView />}
+      {activeTab === "upload" && teachesSubjects && <UploadResults />}
+      {activeTab === "my-results" && teachesSubjects && <MyResults />}
     </DashboardLayout>
   );
 };
@@ -2989,7 +3014,7 @@ const fmt = (n: number) => `₦${Number(n).toLocaleString("en-NG", { minimumFrac
 
 const NONE = "__none__"; // sentinel for "no selection" in Select components
 
-const FinancesView = () => {
+export const FinancesView = () => {
   const { user, isSuperAdmin } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();

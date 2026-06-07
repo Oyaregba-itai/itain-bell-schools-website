@@ -10,16 +10,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { GraduationCap, BookOpen, BarChart3, Upload, Star, ClipboardCheck, CheckCircle, Clock, Send, Users, ChevronRight, ChevronLeft } from "lucide-react";
+import { GraduationCap, BookOpen, BarChart3, Upload, Star, ClipboardCheck, CheckCircle, Clock, Send, Users, ChevronRight, ChevronLeft, Banknote } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import EventsView from "@/components/EventsView";
 import MessagingView from "@/components/MessagingView";
 import ProfilePage from "@/components/ProfilePage";
+import { FinancesView } from "@/pages/AdminDashboard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const TeacherDashboard = () => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
 
   // Check if this teacher is head of any class
@@ -34,9 +35,14 @@ const TeacherDashboard = () => {
   });
 
   const isHeadOfClass = (headClasses?.length ?? 0) > 0;
-  const extraTabs = isHeadOfClass
-    ? [{ id: "my-class", label: `My Class${headClasses?.[0]?.name ? ` — ${headClasses[0].name}` : ""}`, icon: Users }]
-    : [];
+  const isFinanceHead = profile?.is_finance_head === true;
+
+  const extraTabs = [
+    ...(isHeadOfClass
+      ? [{ id: "my-class", label: `My Class${headClasses?.[0]?.name ? ` — ${headClasses[0].name}` : ""}`, icon: Users }]
+      : []),
+    ...(isFinanceHead ? [{ id: "finances", label: "Finances", icon: Banknote }] : []),
+  ];
 
   return (
     <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} extraTabs={extraTabs}>
@@ -46,6 +52,7 @@ const TeacherDashboard = () => {
       {activeTab === "upload" && <UploadResults />}
       {activeTab === "my-results" && <MyResults />}
       {activeTab === "my-class" && isHeadOfClass && <MyClassView headClasses={headClasses!} />}
+      {activeTab === "finances" && isFinanceHead && <FinancesView />}
       {activeTab === "timetable" && <TimetableView />}
       {activeTab === "events" && <EventsView />}
       {activeTab === "announcements" && <AnnouncementsView />}
@@ -511,7 +518,7 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
 
 // ── My Subjects drill-down ────────────────────────────────────────────────────
 
-const MySubjectsView = () => {
+export const MySubjectsView = () => {
   const { user } = useAuth();
   const [viewingSubject, setViewingSubject] = useState<string | null>(null);
   const [viewingClass, setViewingClass] = useState<{ classId: string; className: string; subjectName: string } | null>(null);
@@ -886,7 +893,7 @@ const gradeFromPct = (pct: number) => {
 const getGradeForScore = (score: number, outOf: number) =>
   outOf > 0 ? gradeFromPct((score / outOf) * 100) : gradeFromPct(0);
 
-const UploadResults = () => {
+export const UploadResults = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1127,7 +1134,7 @@ const UploadResults = () => {
   );
 };
 
-const MyResults = () => {
+export const MyResults = () => {
   const { user } = useAuth();
 
   const { data: allData } = useQuery({
