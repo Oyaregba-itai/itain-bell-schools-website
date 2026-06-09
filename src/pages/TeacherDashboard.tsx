@@ -925,15 +925,12 @@ export const UploadResults = () => {
     queryKey: ["my-subjects", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      const { data } = await supabase.from("subjects").select("*").eq("teacher_id", user.id).order("name");
-      const rows = data || [];
-      const classIds = [...new Set(rows.map((s: any) => s.class_id).filter(Boolean))];
-      let classMap: Record<string, string> = {};
-      if (classIds.length > 0) {
-        const { data: cls } = await supabase.from("classes").select("id, name").in("id", classIds as string[]);
-        (cls || []).forEach((c: any) => { classMap[c.id] = c.name; });
-      }
-      return rows.map((s: any) => ({ ...s, className: classMap[s.class_id] || "" }));
+      const { data } = await supabase
+        .from("subjects")
+        .select("*, classes(id, name)")
+        .eq("teacher_id", user.id)
+        .order("name");
+      return (data || []).map((s: any) => ({ ...s, className: s.classes?.name || "" }));
     },
     enabled: !!user,
   });
