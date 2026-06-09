@@ -95,16 +95,18 @@ const TeacherOverview = ({ onTabChange }: { onTabChange: (tab: string) => void }
     queryFn: async () => {
       if (!user?.id) return null;
 
-      // My subjects with class names
-      const { data: subjectsRaw } = await supabase.from("subjects").select("*").eq("teacher_id", user.id).order("name");
-      const subjects = subjectsRaw || [];
-      const classIds = [...new Set(subjects.map((s: any) => s.class_id).filter(Boolean))];
-      let classMap: Record<string, string> = {};
-      if (classIds.length > 0) {
-        const { data: cls } = await supabase.from("classes").select("id, name").in("id", classIds as string[]);
-        (cls || []).forEach((c: any) => { classMap[c.id] = c.name; });
-      }
-      const mySubjects = subjects.map((s: any) => ({ ...s, className: classMap[s.class_id] || "—" }));
+      // My subjects with class names (via subject_assignments)
+      const { data: rawAssignments } = await supabase
+        .from("subject_assignments")
+        .select("subject_id, class_id, teacher_id, subjects(id, name), classes(id, name)")
+        .eq("teacher_id", user.id);
+      const mySubjects = (rawAssignments || []).map((a: any) => ({
+        id: a.subject_id,
+        name: a.subjects?.name || "—",
+        class_id: a.class_id,
+        teacher_id: a.teacher_id,
+        className: a.classes?.name || "—",
+      }));
 
       // Active term
       const { data: activeTerm } = await supabase.from("terms").select("name, academic_year").eq("is_active", true).maybeSingle();
@@ -150,11 +152,16 @@ const TeacherOverview = ({ onTabChange }: { onTabChange: (tab: string) => void }
       const today = dayNames[new Date().getDay()];
       if (today === "Saturday" || today === "Sunday") return [];
 
-      const { data: mySubjects } = await supabase
-        .from("subjects")
-        .select("id, name, class_id")
+      const { data: rawAssignments2 } = await supabase
+        .from("subject_assignments")
+        .select("subject_id, class_id, subjects(name)")
         .eq("teacher_id", user.id);
-      if (!mySubjects?.length) return [];
+      const mySubjects = (rawAssignments2 || []).map((a: any) => ({
+        id: a.subject_id,
+        name: a.subjects?.name || "—",
+        class_id: a.class_id,
+      }));
+      if (!mySubjects.length) return [];
 
       const subjectIds = mySubjects.map((s: any) => s.id);
       const classIds = [...new Set(mySubjects.map((s: any) => s.class_id).filter(Boolean))] as string[];
@@ -401,8 +408,12 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
       const studentIds = studentList.map((s: any) => s.id);
 
       // All subjects for this class
-      const { data: subjectsRaw } = await supabase.from("subjects").select("id, name").eq("class_id", classId).order("name");
-      const subjects = subjectsRaw || [];
+      const { data: assignmentsRaw } = await supabase
+        .from("subject_assignments")
+        .select("subject_id, subjects(id, name)")
+        .eq("class_id", classId);
+      const subjects = (assignmentsRaw || []).map((a: any) => ({ id: a.subject_id, name: a.subjects?.name || "—" }))
+        .sort((x: any, y: any) => x.name.localeCompare(y.name));
       const subjectIds = subjects.map((s: any) => s.id);
 
       // All results for these students + term + type
@@ -646,15 +657,17 @@ export const MySubjectsView = () => {
     queryKey: ["my-subjects-full", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      const { data } = await supabase.from("subjects").select("*").eq("teacher_id", user.id).order("name");
-      const rows = data || [];
-      const classIds = [...new Set(rows.map((s: any) => s.class_id).filter(Boolean))];
-      let classMap: Record<string, string> = {};
-      if (classIds.length > 0) {
-        const { data: cls } = await supabase.from("classes").select("id, name").in("id", classIds as string[]);
-        (cls || []).forEach((c: any) => { classMap[c.id] = c.name; });
-      }
-      return rows.map((s: any) => ({ ...s, className: classMap[s.class_id] || "—" }));
+      const { data } = await supabase
+        .from("subject_assignments")
+        .select("subject_id, class_id, teacher_id, subjects(id, name), classes(id, name)")
+        .eq("teacher_id", user.id);
+      return (data || []).map((a: any) => ({
+        id: a.subject_id,
+        name: a.subjects?.name || "—",
+        class_id: a.class_id,
+        teacher_id: a.teacher_id,
+        className: a.classes?.name || "—",
+      }));
     },
     enabled: !!user,
   });
@@ -839,8 +852,12 @@ const MyClassView = ({ headClasses }: { headClasses: any[] }) => {
       const studentList = students || [];
       const studentIds = studentList.map((s: any) => s.id);
 
-      const { data: subjects } = await supabase.from("subjects").select("id, name").eq("class_id", classId);
-      const totalSubjects = subjects?.length || 0;
+      const { data: subjectAssignments } = await supabase
+        .from("subject_assignments")
+        .select("subject_id, subjects(id, name)")
+        .eq("class_id", classId);
+      const subjects = (subjectAssignments || []).map((a: any) => ({ id: a.subject_id, name: a.subjects?.name || "—" }));
+      const totalSubjects = subjects.length;
 
       // Results per student for selected term + type
       let resultCounts: Record<string, number> = {};
@@ -1029,11 +1046,16 @@ export const UploadResults = () => {
     queryFn: async () => {
       if (!user?.id) return [];
       const { data } = await supabase
-        .from("subjects")
-        .select("*, classes(id, name)")
-        .eq("teacher_id", user.id)
-        .order("name");
-      return (data || []).map((s: any) => ({ ...s, className: s.classes?.name || "" }));
+        .from("subject_assignments")
+        .select("subject_id, class_id, teacher_id, subjects(id, name), classes(id, name)")
+        .eq("teacher_id", user.id);
+      return (data || []).map((a: any) => ({
+        id: a.subject_id,
+        class_id: a.class_id,
+        teacher_id: a.teacher_id,
+        name: a.subjects?.name || "—",
+        className: a.classes?.name || "",
+      }));
     },
     enabled: !!user,
   });

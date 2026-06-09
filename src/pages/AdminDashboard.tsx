@@ -33,7 +33,7 @@ const AdminDashboard = () => {
     queryKey: ["admin-own-subjects", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      const { data } = await supabase.from("subjects").select("id").eq("teacher_id", user.id);
+      const { data } = await supabase.from("subject_assignments").select("id").eq("teacher_id", user.id);
       return data || [];
     },
     enabled: !!user,
@@ -158,7 +158,7 @@ const AdminOverview = () => {
   const { data: subjectCoverage } = useQuery({
     queryKey: ["subject-coverage"],
     queryFn: async () => {
-      const { data } = await supabase.from("subjects").select("teacher_id");
+      const { data } = await supabase.from("subject_assignments").select("teacher_id");
       const total = data?.length || 0;
       const assigned = data?.filter((s: any) => s.teacher_id).length || 0;
       return [
@@ -493,16 +493,18 @@ const TeacherProfile = ({ user, onBack }: { user: any; onBack: () => void }) => 
   const { data: subjects } = useQuery({
     queryKey: ["teacher-subjects-profile", user.user_id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("subjects").select("*").eq("teacher_id", user.user_id).order("name");
+      const { data, error } = await supabase
+        .from("subject_assignments")
+        .select("subject_id, class_id, teacher_id, subjects(id, name), classes(id, name)")
+        .eq("teacher_id", user.user_id);
       if (error) throw error;
-      const rows = data || [];
-      const classIds = [...new Set(rows.map((s: any) => s.class_id).filter(Boolean))];
-      let classMap: Record<string, string> = {};
-      if (classIds.length > 0) {
-        const { data: classes } = await supabase.from("classes").select("id, name").in("id", classIds as string[]);
-        (classes || []).forEach((c: any) => { classMap[c.id] = c.name; });
-      }
-      return rows.map((s: any) => ({ ...s, className: classMap[s.class_id] || "—" }));
+      return (data || []).map((a: any) => ({
+        id: a.subject_id,
+        name: a.subjects?.name || "—",
+        class_id: a.class_id,
+        teacher_id: a.teacher_id,
+        className: a.classes?.name || "—",
+      }));
     },
     enabled: !!user.user_id,
   });
@@ -944,16 +946,25 @@ const ClassDetail = ({ cls, onBack }: { cls: any; onBack: () => void }) => {
   const { data: subjects } = useQuery({
     queryKey: ["class-subjects-detail", cls.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("subjects").select("*").eq("class_id", cls.id).order("name");
+      const { data, error } = await supabase
+        .from("subject_assignments")
+        .select("id, subject_id, teacher_id, subjects(id, name)")
+        .eq("class_id", cls.id)
+        .order("subjects(name)");
       if (error) throw error;
       const rows = data || [];
-      const teacherIds = [...new Set(rows.map((s: any) => s.teacher_id).filter(Boolean))];
+      const teacherIds = [...new Set(rows.map((a: any) => a.teacher_id).filter(Boolean))];
       let teacherMap: Record<string, string> = {};
       if (teacherIds.length > 0) {
         const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", teacherIds as string[]);
         (profiles || []).forEach((p: any) => { teacherMap[p.user_id] = p.full_name; });
       }
-      return rows.map((s: any) => ({ ...s, teacherName: teacherMap[s.teacher_id] || "—" }));
+      return rows.map((a: any) => ({
+        id: a.subject_id,
+        name: a.subjects?.name || "—",
+        teacher_id: a.teacher_id,
+        teacherName: teacherMap[a.teacher_id] || "—",
+      }));
     },
   });
 
@@ -1557,14 +1568,22 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
       // Subjects assigned to this student's class
       let classSubjects: any[] = [];
       if (student?.class_id) {
-        const { data: subjectsData } = await supabase.from("subjects").select("*").eq("class_id", student.class_id).order("name");
-        const subjectTeacherIds = [...new Set((subjectsData || []).map((s: any) => s.teacher_id).filter(Boolean))];
+        const { data: assignmentsData } = await supabase
+          .from("subject_assignments")
+          .select("subject_id, teacher_id, subjects(id, name)")
+          .eq("class_id", student.class_id);
+        const subjectTeacherIds = [...new Set((assignmentsData || []).map((a: any) => a.teacher_id).filter(Boolean))];
         let subjectTeacherMap: Record<string, string> = {};
         if (subjectTeacherIds.length > 0) {
           const { data: teacherProfiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", subjectTeacherIds as string[]);
           (teacherProfiles || []).forEach((p: any) => { subjectTeacherMap[p.user_id] = p.full_name; });
         }
-        classSubjects = (subjectsData || []).map((s: any) => ({ ...s, teacherName: subjectTeacherMap[s.teacher_id] || "—" }));
+        classSubjects = (assignmentsData || []).map((a: any) => ({
+          id: a.subject_id,
+          name: a.subjects?.name || "—",
+          teacher_id: a.teacher_id,
+          teacherName: subjectTeacherMap[a.teacher_id] || "—",
+        })).sort((x: any, y: any) => x.name.localeCompare(y.name));
       }
 
       return {
@@ -1968,16 +1987,22 @@ const SubjectList = ({ onView }: { onView: (name: string) => void }) => {
   const { data: grouped } = useQuery({
     queryKey: ["all-subjects-grouped"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("subjects").select("id, name, class_id, teacher_id").order("name");
-      if (error) throw error;
-      const rows = data || [];
-      const map: Record<string, { name: string; total: number; assigned: number }> = {};
-      rows.forEach((s: any) => {
-        if (!map[s.name]) map[s.name] = { name: s.name, total: 0, assigned: 0 };
-        map[s.name].total++;
-        if (s.teacher_id) map[s.name].assigned++;
+      const [subjectsRes, assignmentsRes] = await Promise.all([
+        supabase.from("subjects").select("id, name").order("name"),
+        supabase.from("subject_assignments").select("subject_id, teacher_id"),
+      ]);
+      const assignmentsBySubject: Record<string, { total: number; assigned: number }> = {};
+      (assignmentsRes.data || []).forEach((a: any) => {
+        if (!assignmentsBySubject[a.subject_id]) assignmentsBySubject[a.subject_id] = { total: 0, assigned: 0 };
+        assignmentsBySubject[a.subject_id].total++;
+        if (a.teacher_id) assignmentsBySubject[a.subject_id].assigned++;
       });
-      return Object.values(map).sort((a, b) => a.name.localeCompare(b.name));
+      return (subjectsRes.data || []).map((s: any) => ({
+        name: s.name,
+        id: s.id,
+        total: assignmentsBySubject[s.id]?.total || 0,
+        assigned: assignmentsBySubject[s.id]?.assigned || 0,
+      }));
     },
   });
 
@@ -2004,13 +2029,24 @@ const SubjectList = ({ onView }: { onView: (name: string) => void }) => {
 
   const addSubject = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("subjects").insert([{
-        name: newSubject.name, class_id: newSubject.class_id || null, teacher_id: newSubject.teacher_id || null,
-      }]);
-      if (error) throw error;
+      // Upsert the canonical subject (by name), then create the class assignment
+      const { data: subjectRow, error: subjectErr } = await supabase
+        .from("subjects")
+        .upsert({ name: newSubject.name }, { onConflict: "name" })
+        .select("id")
+        .single();
+      if (subjectErr) throw subjectErr;
+      if (newSubject.class_id) {
+        const { error: assignErr } = await supabase.from("subject_assignments").upsert({
+          subject_id: subjectRow.id,
+          class_id: newSubject.class_id,
+          teacher_id: newSubject.teacher_id || null,
+        }, { onConflict: "subject_id,class_id" });
+        if (assignErr) throw assignErr;
+      }
     },
     onSuccess: () => {
-      toast({ title: "Subject added" });
+      toast({ title: "Subject assigned" });
       queryClient.invalidateQueries({ queryKey: ["all-subjects-grouped"] });
       setNewSubject({ name: "", class_id: "", teacher_id: "" });
     },
@@ -2093,21 +2129,31 @@ const SubjectDetail = ({ subjectName, onBack }: { subjectName: string; onBack: (
   const { data: rows } = useQuery({
     queryKey: ["subject-detail", subjectName],
     queryFn: async () => {
-      const { data, error } = await supabase.from("subjects").select("*").eq("name", subjectName);
+      // Get the canonical subject ID by name
+      const { data: subjectRow } = await supabase
+        .from("subjects").select("id").eq("name", subjectName).single();
+      if (!subjectRow) return [];
+      // Get all class assignments for this subject
+      const { data: assignments, error } = await supabase
+        .from("subject_assignments")
+        .select("id, class_id, teacher_id, classes(id, name)")
+        .eq("subject_id", subjectRow.id);
       if (error) throw error;
-      const subjects = data || [];
-      const classIds = [...new Set(subjects.map((s: any) => s.class_id).filter(Boolean))];
-      const teacherIds = [...new Set(subjects.map((s: any) => s.teacher_id).filter(Boolean))];
-      const [classRes, teacherRes] = await Promise.all([
-        classIds.length > 0 ? supabase.from("classes").select("id, name").in("id", classIds as string[]) : { data: [] },
-        teacherIds.length > 0 ? supabase.from("profiles").select("user_id, full_name").in("user_id", teacherIds as string[]) : { data: [] },
-      ]);
-      const classMap: Record<string, string> = {};
-      const teacherMap: Record<string, string> = {};
-      (classRes.data || []).forEach((c: any) => { classMap[c.id] = c.name; });
-      (teacherRes.data || []).forEach((t: any) => { teacherMap[t.user_id] = t.full_name; });
-      return subjects
-        .map((s: any) => ({ ...s, className: classMap[s.class_id] || "—", teacherName: teacherMap[s.teacher_id] || null }))
+      const teacherIds = [...new Set((assignments || []).map((a: any) => a.teacher_id).filter(Boolean))];
+      let teacherMap: Record<string, string> = {};
+      if (teacherIds.length > 0) {
+        const { data: profiles } = await supabase.from("profiles").select("user_id, full_name").in("user_id", teacherIds as string[]);
+        (profiles || []).forEach((p: any) => { teacherMap[p.user_id] = p.full_name; });
+      }
+      return (assignments || [])
+        .map((a: any) => ({
+          id: a.id, // assignment id (used for update)
+          subject_id: subjectRow.id,
+          class_id: a.class_id,
+          teacher_id: a.teacher_id,
+          className: a.classes?.name || "—",
+          teacherName: teacherMap[a.teacher_id] || null,
+        }))
         .sort((a: any, b: any) => a.className.localeCompare(b.className));
     },
   });
@@ -2125,7 +2171,7 @@ const SubjectDetail = ({ subjectName, onBack }: { subjectName: string; onBack: (
 
   const updateTeacher = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("subjects")
+      const { error } = await supabase.from("subject_assignments")
         .update({ teacher_id: editingRow.teacher_id || null })
         .eq("id", editingRow.id);
       if (error) throw error;

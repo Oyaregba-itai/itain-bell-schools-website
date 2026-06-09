@@ -97,9 +97,22 @@ const TimetableView = () => {
   const { data: subjects } = useQuery({
     queryKey: ["subjects"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("subjects").select("*").order("name");
+      const { data, error } = await supabase.from("subjects").select("id, name").order("name");
       if (error) throw error;
       return data || [];
+    },
+  });
+
+  // When adding an entry for a specific class, only show subjects assigned to that class
+  const { data: classSubjectsForForm } = useQuery({
+    queryKey: ["class-subjects-form", form.class_id],
+    enabled: !!form.class_id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("subject_assignments")
+        .select("subject_id, subjects(id, name)")
+        .eq("class_id", form.class_id);
+      return (data || []).map((a: any) => ({ id: a.subject_id, name: a.subjects?.name || "—" }));
     },
   });
 
@@ -169,9 +182,7 @@ const TimetableView = () => {
 
   const classMap   = new Map((classes  || []).map((c: any) => [c.id, c.name]));
   const subjectMap = new Map((subjects || []).map((s: any) => [s.id, s.name]));
-  const filteredSubjects = form.class_id
-    ? subjects?.filter((s: any) => s.class_id === form.class_id)
-    : subjects;
+  const filteredSubjects = form.class_id ? (classSubjectsForForm || []) : (subjects || []);
   const classesToShow = selectedClass === "all"
     ? (classes || [])
     : (classes || []).filter((c: any) => c.id === selectedClass);
