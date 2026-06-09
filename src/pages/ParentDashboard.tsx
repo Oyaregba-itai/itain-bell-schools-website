@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,7 +18,9 @@ import ProfilePage from "@/components/ProfilePage";
 import ReportCard from "@/components/ReportCard";
 
 const ParentDashboard = () => {
-  const [activeTab, setActiveTab] = useState("overview");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") || "overview";
+  const setActiveTab = (tab: string) => setSearchParams({ tab });
 
   return (
     <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab}>
