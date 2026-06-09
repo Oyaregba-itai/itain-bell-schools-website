@@ -414,29 +414,31 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
   const { data: users } = useQuery({
     queryKey: ["all-users"],
     queryFn: async () => {
-      const { data: profiles, error: profileError } = await supabase
-        .from("profiles")
-        .select("id, user_id, full_name, email, phone, staff_type, created_at");
-      if (profileError) throw profileError;
+      const [profilesRes, rolesRes, legacyRes] = await Promise.all([
+        supabase.from("profiles").select("id, user_id, full_name, email, phone, staff_type, created_at"),
+        supabase.from("user_roles").select("user_id, role"),
+        supabase.from("users").select("id, email"),
+      ]);
+      if (profilesRes.error) throw profilesRes.error;
 
-      const { data: roles, error: roleError } = await supabase
-        .from("user_roles")
-        .select("user_id, role");
-      if (roleError) throw roleError;
+      // Build email fallback map from legacy users table (keyed by user_id)
+      const legacyEmailMap: Record<string, string> = {};
+      (legacyRes.data || []).forEach((u: any) => { if (u.id && u.email) legacyEmailMap[u.id] = u.email; });
 
-      const usersWithRoles = profiles?.map((profile: any) => {
-        const userRole = roles?.find((r: any) => r.user_id === profile.user_id);
+      const usersWithRoles = (profilesRes.data || []).map((profile: any) => {
+        const userRole = rolesRes.data?.find((r: any) => r.user_id === profile.user_id);
+        const email = profile.email || legacyEmailMap[profile.user_id] || "";
         return {
           id: profile.id,
           user_id: profile.user_id,
           full_name: profile.full_name,
-          email: profile.email || "",
+          email,
           phone: profile.phone || "",
           staff_type: profile.staff_type || "full_time",
           role: userRole?.role || "parent",
           created_at: profile.created_at,
         };
-      }) || [];
+      });
 
       return usersWithRoles.sort((a: any, b: any) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -552,7 +554,7 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <h3 className="text-lg font-heading text-foreground">Manage Users</h3>
+        <h3 className="text-lg font-heading text-foreground">Manage Staff</h3>
         <div className="flex gap-2">
           <BulkCreateStaffUsers />
           <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) resetDialog(); }}>

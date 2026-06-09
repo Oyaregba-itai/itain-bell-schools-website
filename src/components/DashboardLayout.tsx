@@ -21,7 +21,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange, extraTabs = [] }: D
     { id: "overview", label: "Overview", icon: BarChart3 },
     { id: "profile", label: "Profile", icon: Users },
     { id: "admissions", label: "Applications", icon: GraduationCap },
-    { id: "users", label: "Manage Users", icon: Users },
+    { id: "users", label: "Manage Staff", icon: Users },
     { id: "classes", label: "Classes", icon: BookOpen },
     { id: "students", label: "Students", icon: GraduationCap },
     { id: "subjects", label: "Subjects", icon: BookOpen },
