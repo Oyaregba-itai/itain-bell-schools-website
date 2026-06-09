@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle, Send, CheckCircle, Banknote, Receipt, TrendingDown, CreditCard } from "lucide-react";
+import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle, Send, CheckCircle, Banknote, Receipt, TrendingDown, CreditCard, Calendar, Megaphone, Clock } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import MessagingView from "@/components/MessagingView";
@@ -202,6 +202,37 @@ const AdminOverview = () => {
     },
   });
 
+  const { data: upcomingEvents } = useQuery({
+    queryKey: ["upcoming-events-overview"],
+    queryFn: async () => {
+      const today = new Date().toISOString().split("T")[0];
+      const { data } = await supabase.from("events").select("id, title, event_type, start_date").gte("start_date", today).order("start_date").limit(5);
+      return data || [];
+    },
+  });
+
+  const { data: recentAnnouncements } = useQuery({
+    queryKey: ["recent-announcements-overview"],
+    queryFn: async () => {
+      const { data } = await supabase.from("announcements").select("id, title, target_role, created_at").order("created_at", { ascending: false }).limit(4);
+      return data || [];
+    },
+  });
+
+  const { data: todayTimetable } = useQuery({
+    queryKey: ["today-timetable-overview"],
+    queryFn: async () => {
+      const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const today = days[new Date().getDay()];
+      const { data } = await supabase.from("timetable_entries").select("id, start_time, end_time, class_id, subject_id, classes(name), subjects(name)").eq("day_of_week", today).order("start_time").limit(10);
+      return (data || []).map((t: any) => ({
+        ...t,
+        className: t.classes?.name || "—",
+        subjectName: t.subjects?.name || "—",
+      }));
+    },
+  });
+
   return (
     <div className="space-y-6">
       {/* Welcome banner */}
@@ -342,6 +373,107 @@ const AdminOverview = () => {
             </div>
           ) : (
             <div className="h-[160px] flex items-center justify-center text-muted-foreground text-sm">No results uploaded yet</div>
+          )}
+        </div>
+      </div>
+
+      {/* Portal overview: Events · Announcements · Today's Timetable */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Upcoming Events */}
+        <div className="bg-card rounded-xl p-5 shadow-card">
+          <div className="flex items-center gap-2 mb-4">
+            <Calendar size={18} className="text-primary" />
+            <h4 className="font-heading font-semibold text-foreground">Upcoming Events</h4>
+          </div>
+          {upcomingEvents?.length ? (
+            <div className="space-y-3">
+              {upcomingEvents.map((e: any) => {
+                const typeColors: Record<string, string> = {
+                  holiday: "bg-amber-100 text-amber-700",
+                  school_event: "bg-blue-100 text-blue-700",
+                  sports_day: "bg-green-100 text-green-700",
+                  exam: "bg-purple-100 text-purple-700",
+                  parent_meeting: "bg-rose-100 text-rose-700",
+                  other: "bg-gray-100 text-gray-600",
+                };
+                const badge = typeColors[e.event_type] || typeColors.other;
+                return (
+                  <div key={e.id} className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex flex-col items-center justify-center flex-shrink-0 text-primary">
+                      <span className="text-xs font-bold leading-none">{new Date(e.start_date).toLocaleDateString("en-GB", { day: "numeric" })}</span>
+                      <span className="text-[10px] uppercase leading-none opacity-80">{new Date(e.start_date).toLocaleDateString("en-GB", { month: "short" })}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{e.title}</p>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${badge}`}>{e.event_type?.replace("_", " ")}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-6">No upcoming events</p>
+          )}
+        </div>
+
+        {/* Latest Announcements */}
+        <div className="bg-card rounded-xl p-5 shadow-card">
+          <div className="flex items-center gap-2 mb-4">
+            <Megaphone size={18} className="text-primary" />
+            <h4 className="font-heading font-semibold text-foreground">Latest Announcements</h4>
+          </div>
+          {recentAnnouncements?.length ? (
+            <div className="space-y-3">
+              {recentAnnouncements.map((a: any) => {
+                const roleColors: Record<string, string> = {
+                  all: "bg-green-100 text-green-700",
+                  teacher: "bg-blue-100 text-blue-700",
+                  parent: "bg-purple-100 text-purple-700",
+                  admin: "bg-rose-100 text-rose-700",
+                };
+                const badge = roleColors[a.target_role] || roleColors.all;
+                return (
+                  <div key={a.id} className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Megaphone size={14} className="text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{a.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${badge}`}>{a.target_role}</span>
+                        <span className="text-[10px] text-muted-foreground">{new Date(a.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-6">No announcements yet</p>
+          )}
+        </div>
+
+        {/* Today's Timetable */}
+        <div className="bg-card rounded-xl p-5 shadow-card">
+          <div className="flex items-center gap-2 mb-4">
+            <Clock size={18} className="text-primary" />
+            <h4 className="font-heading font-semibold text-foreground">Today's Timetable</h4>
+            <span className="text-xs text-muted-foreground ml-auto">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date().getDay()]}</span>
+          </div>
+          {todayTimetable?.length ? (
+            <div className="space-y-2">
+              {todayTimetable.map((t: any) => (
+                <div key={t.id} className="flex items-center gap-3 py-1.5 border-b border-border last:border-0">
+                  <span className="text-xs font-mono text-muted-foreground w-20 flex-shrink-0">{t.start_time?.slice(0,5)} – {t.end_time?.slice(0,5)}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{t.subjectName}</p>
+                    <p className="text-xs text-muted-foreground">{t.className}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-6">No classes scheduled today</p>
           )}
         </div>
       </div>
