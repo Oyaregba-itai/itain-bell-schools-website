@@ -13,14 +13,23 @@ import { Plus, Clock } from "lucide-react";
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 
-// Canonical time slots in display order
-const TIME_SLOTS = [
-  { start: "08:20", end: "09:20" },
-  { start: "09:30", end: "10:30" },
-  { start: "10:30", end: "11:30" },
-  { start: "12:00", end: "13:00" },
-  { start: "13:00", end: "14:00" },
-  { start: "14:00", end: "14:30" },
+type LessonSlot = { type: "lesson"; start: string; end: string };
+type EventSlot  = { type: "event";  start: string; end: string; label: string; color: string };
+type Slot = LessonSlot | EventSlot;
+
+// Full school day in order — events span all day columns, lessons show per-class subjects
+const TIME_SLOTS: Slot[] = [
+  { type: "event",  start: "07:30", end: "08:00", label: "Morning Drill",  color: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300" },
+  { type: "event",  start: "08:00", end: "08:20", label: "Assembly",       color: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300" },
+  { type: "lesson", start: "08:20", end: "09:20" },
+  { type: "event",  start: "09:20", end: "09:30", label: "Short Break",    color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
+  { type: "lesson", start: "09:30", end: "10:30" },
+  { type: "lesson", start: "10:30", end: "11:30" },
+  { type: "event",  start: "11:30", end: "12:00", label: "Break / Food & Play", color: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" },
+  { type: "lesson", start: "12:00", end: "13:00" },
+  { type: "lesson", start: "13:00", end: "14:00" },
+  { type: "lesson", start: "14:00", end: "14:30" },
+  { type: "event",  start: "14:30", end: "14:30", label: "Dismissal",      color: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300" },
 ];
 
 const TimetableView = () => {
@@ -169,10 +178,11 @@ const TimetableView = () => {
             const classEntries = entries.filter((e: any) => e.class_id === cls.id);
             if (classEntries.length === 0) return null;
 
-            // Determine which time slots actually have data for this class
-            const usedSlots = TIME_SLOTS.filter(slot =>
-              classEntries.some((e: any) => e.start_time.slice(0, 5) === slot.start)
-            );
+            // Show all event slots always; show lesson slots that have at least one entry for this class
+            const visibleSlots = TIME_SLOTS.filter(slot => {
+              if (slot.type === "event") return true;
+              return classEntries.some((e: any) => e.start_time.slice(0, 5) === slot.start);
+            });
 
             return (
               <div key={cls.id}>
@@ -193,32 +203,50 @@ const TimetableView = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {usedSlots.map((slot, rowIdx) => (
-                        <tr key={slot.start} className={rowIdx % 2 === 0 ? "bg-background" : "bg-muted/40"}>
-                          <td className="p-3 text-xs font-medium text-muted-foreground whitespace-nowrap border-r border-border">
-                            {slot.start}<br /><span className="opacity-60">– {slot.end}</span>
-                          </td>
-                          {DAYS.map(day => {
-                            const entry = classEntries.find(
-                              (e: any) =>
-                                e.day_of_week === day &&
-                                e.start_time.slice(0, 5) === slot.start
-                            );
-                            const subject = entry ? (subjectMap.get(entry.subject_id) || "—") : "";
-                            return (
-                              <td key={day} className="p-3 text-center border-l border-border/50">
-                                {entry ? (
-                                  <span className="inline-block bg-primary/10 text-primary rounded-md px-2 py-1 text-xs font-medium leading-tight">
-                                    {subject}
-                                  </span>
-                                ) : (
-                                  <span className="text-muted-foreground/40 text-xs">—</span>
+                      {visibleSlots.map((slot, rowIdx) => {
+                        if (slot.type === "event") {
+                          return (
+                            <tr key={`event-${slot.start}`}>
+                              <td className="p-2 text-xs font-medium text-muted-foreground whitespace-nowrap border-r border-border">
+                                {slot.start}
+                                {slot.start !== slot.end && (
+                                  <><br /><span className="opacity-60">– {slot.end}</span></>
                                 )}
                               </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
+                              <td colSpan={5} className={`p-2 text-center text-xs font-semibold tracking-wide ${slot.color}`}>
+                                {slot.label}
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return (
+                          <tr key={slot.start} className={rowIdx % 2 === 0 ? "bg-background" : "bg-muted/40"}>
+                            <td className="p-3 text-xs font-medium text-muted-foreground whitespace-nowrap border-r border-border">
+                              {slot.start}<br /><span className="opacity-60">– {slot.end}</span>
+                            </td>
+                            {DAYS.map(day => {
+                              const entry = classEntries.find(
+                                (e: any) =>
+                                  e.day_of_week === day &&
+                                  e.start_time.slice(0, 5) === slot.start
+                              );
+                              const subject = entry ? (subjectMap.get(entry.subject_id) || "—") : "";
+                              return (
+                                <td key={day} className="p-3 text-center border-l border-border/50">
+                                  {entry ? (
+                                    <span className="inline-block bg-primary/10 text-primary rounded-md px-2 py-1 text-xs font-medium leading-tight">
+                                      {subject}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted-foreground/40 text-xs">—</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
