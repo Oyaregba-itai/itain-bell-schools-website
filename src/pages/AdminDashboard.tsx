@@ -77,12 +77,35 @@ const GRADE_COLORS: Record<string, string> = {
 
 const getHour = () => new Date().getHours();
 const greeting = () => getHour() < 12 ? "Good morning" : getHour() < 17 ? "Good afternoon" : "Good evening";
-const extractFirstName = (fullName?: string | null) =>
-  fullName ? fullName.replace(/^(Mrs?\.?|Miss|Ms\.?|Dr\.?|Coach)\s+/i, "").split(" ")[0] : "Admin";
+const getTitledName = (fullName?: string | null) => {
+  if (!fullName) return "Admin";
+  const titleMatch = fullName.match(/^(Mrs?\.?|Miss|Ms\.?|Dr\.?|Coach|Sir)\s+/i);
+  const withoutTitle = fullName.replace(/^(Mrs?\.?|Miss|Ms\.?|Dr\.?|Coach|Sir)\s+/i, "").trim();
+  const lastName = withoutTitle.split(" ").pop() || withoutTitle;
+  return titleMatch ? `${titleMatch[1]} ${lastName}` : withoutTitle.split(" ")[0];
+};
+const formatDateTime = (d: Date) => ({
+  date: d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+  time: d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+});
 
 const AdminOverview = () => {
   const { profile, isSuperAdmin } = useAuth();
-  const firstName = extractFirstName(profile?.full_name);
+  const displayName = getTitledName(profile?.full_name);
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(t);
+  }, []);
+  const { date, time } = formatDateTime(now);
+
+  const { data: activeTerm } = useQuery({
+    queryKey: ["active-term"],
+    queryFn: async () => {
+      const { data } = await supabase.from("terms").select("name, academic_year").eq("is_active", true).maybeSingle();
+      return data || null;
+    },
+  });
 
   const { data: stats } = useQuery({
     queryKey: ["admin-stats"],
@@ -182,16 +205,25 @@ const AdminOverview = () => {
   return (
     <div className="space-y-6">
       {/* Welcome banner */}
-      <div className="hero-gradient rounded-xl p-5 shadow-card flex items-center gap-4 text-primary-foreground">
-        <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0">
-          {profile?.profile_picture_url
-            ? <img src={profile.profile_picture_url} className="w-full h-full rounded-full object-cover" alt="" />
-            : firstName[0]?.toUpperCase()
-          }
+      <div className="hero-gradient rounded-xl p-5 shadow-card flex items-center justify-between gap-4 flex-wrap text-primary-foreground">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0">
+            {profile?.profile_picture_url
+              ? <img src={profile.profile_picture_url} className="w-full h-full rounded-full object-cover" alt="" />
+              : displayName[0]?.toUpperCase()
+            }
+          </div>
+          <div>
+            <p className="text-lg font-heading">{greeting()}, {displayName}!</p>
+            <p className="text-sm opacity-80">{isSuperAdmin ? "School Administrator" : "Administrator"}</p>
+          </div>
         </div>
-        <div>
-          <p className="text-lg font-heading">{greeting()}, {firstName}!</p>
-          <p className="text-sm opacity-80">{isSuperAdmin ? "School Administrator" : "Administrator"}</p>
+        <div className="text-right">
+          {activeTerm && (
+            <p className="text-sm font-semibold opacity-90">{activeTerm.name} · {activeTerm.academic_year}</p>
+          )}
+          <p className="text-sm opacity-80">{date}</p>
+          <p className="text-lg font-heading">{time}</p>
         </div>
       </div>
 
