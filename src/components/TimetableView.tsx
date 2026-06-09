@@ -11,6 +11,17 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Clock } from "lucide-react";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+const DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+
+// Canonical time slots in display order
+const TIME_SLOTS = [
+  { start: "08:20", end: "09:20" },
+  { start: "09:30", end: "10:30" },
+  { start: "10:30", end: "11:30" },
+  { start: "12:00", end: "13:00" },
+  { start: "13:00", end: "14:00" },
+  { start: "14:00", end: "14:30" },
+];
 
 const TimetableView = () => {
   const { role } = useAuth();
@@ -84,6 +95,16 @@ const TimetableView = () => {
 
   const filteredSubjects = form.class_id ? subjects?.filter((s: any) => s.class_id === form.class_id) : subjects;
 
+  // Build lookup: classId → className
+  const classMap = new Map((classes || []).map((c: any) => [c.id, c.name]));
+  const subjectMap = new Map((subjects || []).map((s: any) => [s.id, s.name]));
+
+  // Classes to render tables for
+  const classesToShow =
+    selectedClass === "all"
+      ? (classes || [])
+      : (classes || []).filter((c: any) => c.id === selectedClass);
+
   return (
     <div>
       <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
@@ -143,27 +164,63 @@ const TimetableView = () => {
           <p className="text-muted-foreground">No timetable entries yet</p>
         </div>
       ) : (
-        <div className="space-y-6">
-          {DAYS.map(day => {
-            const dayEntries = entries.filter(e => e.day_of_week === day);
-            if (dayEntries.length === 0) return null;
+        <div className="space-y-8">
+          {classesToShow.map((cls: any) => {
+            const classEntries = entries.filter((e: any) => e.class_id === cls.id);
+            if (classEntries.length === 0) return null;
+
+            // Determine which time slots actually have data for this class
+            const usedSlots = TIME_SLOTS.filter(slot =>
+              classEntries.some((e: any) => e.start_time.slice(0, 5) === slot.start)
+            );
+
             return (
-              <div key={day}>
-                <h4 className="font-heading text-foreground mb-3">{day}</h4>
-                <div className="grid gap-2">
-                  {dayEntries.map(entry => {
-                    const className = classes?.find((c: any) => c.id === entry.class_id)?.name;
-                    const subjectName = subjects?.find((s: any) => s.id === entry.subject_id)?.name;
-                    return (
-                      <div key={entry.id} className="bg-card rounded-xl p-4 shadow-card flex items-center justify-between">
-                        <div>
-                          <div className="font-medium text-foreground">{subjectName}</div>
-                          <div className="text-sm text-muted-foreground">{className}</div>
-                        </div>
-                        <div className="text-sm font-medium text-primary">{entry.start_time} – {entry.end_time}</div>
-                      </div>
-                    );
-                  })}
+              <div key={cls.id}>
+                {selectedClass === "all" && (
+                  <h4 className="font-heading text-foreground mb-3">{cls.name}</h4>
+                )}
+                <div className="bg-card rounded-xl shadow-card overflow-x-auto">
+                  <table className="w-full text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-primary text-primary-foreground">
+                        <th className="p-3 text-left font-medium whitespace-nowrap w-28 rounded-tl-xl">Time</th>
+                        {DAYS.map((day, i) => (
+                          <th key={day} className={`p-3 text-center font-medium ${i === DAYS.length - 1 ? "rounded-tr-xl" : ""}`}>
+                            <span className="hidden sm:inline">{day}</span>
+                            <span className="sm:hidden">{DAY_SHORT[i]}</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usedSlots.map((slot, rowIdx) => (
+                        <tr key={slot.start} className={rowIdx % 2 === 0 ? "bg-background" : "bg-muted/40"}>
+                          <td className="p-3 text-xs font-medium text-muted-foreground whitespace-nowrap border-r border-border">
+                            {slot.start}<br /><span className="opacity-60">– {slot.end}</span>
+                          </td>
+                          {DAYS.map(day => {
+                            const entry = classEntries.find(
+                              (e: any) =>
+                                e.day_of_week === day &&
+                                e.start_time.slice(0, 5) === slot.start
+                            );
+                            const subject = entry ? (subjectMap.get(entry.subject_id) || "—") : "";
+                            return (
+                              <td key={day} className="p-3 text-center border-l border-border/50">
+                                {entry ? (
+                                  <span className="inline-block bg-primary/10 text-primary rounded-md px-2 py-1 text-xs font-medium leading-tight">
+                                    {subject}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground/40 text-xs">—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             );
