@@ -967,6 +967,30 @@ const ClassDetail = ({ cls, onBack }: { cls: any; onBack: () => void }) => {
     enabled: !!cls.head_teacher_id,
   });
 
+  const { data: classTimetable } = useQuery({
+    queryKey: ["class-timetable-detail", cls.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("timetable_entries")
+        .select("*")
+        .eq("class_id", cls.id)
+        .order("start_time");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const lessonSlots = [
+    { start: "08:20", end: "09:20" },
+    { start: "09:30", end: "10:30" },
+    { start: "10:30", end: "11:30" },
+    { start: "12:00", end: "13:00" },
+    { start: "13:00", end: "14:00" },
+    { start: "14:00", end: "14:30" },
+  ];
+  const ttDays = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
+  const ttDayShort = ["Mon","Tue","Wed","Thu","Fri"];
+
   return (
     <div className="space-y-6">
       <button onClick={onBack} className="flex items-center gap-2 text-muted-foreground hover:text-foreground text-sm transition-colors">
@@ -1028,6 +1052,58 @@ const ClassDetail = ({ cls, onBack }: { cls: any; onBack: () => void }) => {
           </div>
         </div>
       </div>
+
+      {/* Weekly Timetable */}
+      {classTimetable && classTimetable.length > 0 && (() => {
+        const subjectMap = new Map((subjects || []).map((s: any) => [s.id, s.name]));
+        return (
+          <div className="bg-card rounded-xl p-5 shadow-card">
+            <h4 className="font-heading font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Clock size={16} className="text-primary" /> Weekly Timetable
+            </h4>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-primary text-primary-foreground">
+                    <th className="p-2.5 text-left font-medium rounded-tl-lg whitespace-nowrap w-24">Time</th>
+                    {ttDays.map((day, i) => (
+                      <th key={day} className={`p-2.5 text-center font-medium ${i === 4 ? "rounded-tr-lg" : ""}`}>
+                        <span className="hidden sm:inline">{day}</span>
+                        <span className="sm:hidden">{ttDayShort[i]}</span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {lessonSlots.map((slot, ri) => (
+                    <tr key={slot.start} className={ri % 2 === 0 ? "bg-background" : "bg-muted/30"}>
+                      <td className="p-2 text-xs font-medium text-muted-foreground whitespace-nowrap border-r border-border">
+                        {slot.start}<br /><span className="opacity-60">– {slot.end}</span>
+                      </td>
+                      {ttDays.map(day => {
+                        const entry = classTimetable.find(
+                          (e: any) => e.day_of_week === day && e.start_time.slice(0, 5) === slot.start
+                        );
+                        return (
+                          <td key={day} className="p-2 text-center border-l border-border/50">
+                            {entry ? (
+                              <span className="inline-block bg-primary/10 text-primary rounded-md px-2 py-1 text-xs font-medium leading-tight">
+                                {subjectMap.get(entry.subject_id) || "—"}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/30 text-xs">—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };

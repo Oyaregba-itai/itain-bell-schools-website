@@ -142,6 +142,48 @@ const TeacherOverview = ({ onTabChange }: { onTabChange: (tab: string) => void }
     enabled: !!user,
   });
 
+  const { data: todaySchedule } = useQuery({
+    queryKey: ["teacher-today-timetable", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+      const today = dayNames[new Date().getDay()];
+      if (today === "Saturday" || today === "Sunday") return [];
+
+      const { data: mySubjects } = await supabase
+        .from("subjects")
+        .select("id, name, class_id")
+        .eq("teacher_id", user.id);
+      if (!mySubjects?.length) return [];
+
+      const subjectIds = mySubjects.map((s: any) => s.id);
+      const classIds = [...new Set(mySubjects.map((s: any) => s.class_id).filter(Boolean))] as string[];
+
+      const { data: entries } = await supabase
+        .from("timetable_entries")
+        .select("*")
+        .eq("day_of_week", today)
+        .in("subject_id", subjectIds)
+        .order("start_time");
+      if (!entries?.length) return [];
+
+      const { data: classes } = await supabase
+        .from("classes")
+        .select("id, name")
+        .in("id", classIds);
+
+      const subjectMap = new Map(mySubjects.map((s: any) => [s.id, s.name]));
+      const classMap = new Map((classes || []).map((c: any) => [c.id, c.name]));
+
+      return entries.map((e: any) => ({
+        ...e,
+        subjectName: subjectMap.get(e.subject_id) || "—",
+        className: classMap.get(e.class_id) || "—",
+      }));
+    },
+    enabled: !!user,
+  });
+
   const displayName = getTitledName(profile?.full_name);
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -251,6 +293,38 @@ const TeacherOverview = ({ onTabChange }: { onTabChange: (tab: string) => void }
             </div>
           )}
         </div>
+      </div>
+
+      {/* Today's timetable */}
+      <div className="bg-card rounded-xl p-5 shadow-card">
+        <h4 className="font-heading font-semibold text-foreground mb-4 flex items-center gap-2">
+          <Clock size={16} className="text-primary" />
+          Today&apos;s Schedule
+          {todaySchedule && todaySchedule.length > 0 && (
+            <span className="ml-auto text-xs font-normal text-muted-foreground">{new Date().toLocaleDateString("en-GB", { weekday: "long" })}</span>
+          )}
+        </h4>
+        {!todaySchedule || todaySchedule.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {new Date().getDay() === 0 || new Date().getDay() === 6
+              ? "No classes today — enjoy your weekend!"
+              : "No timetable entries found for your subjects today."}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {todaySchedule.map((entry: any) => (
+              <div key={entry.id} className="flex items-center gap-4 p-3 rounded-lg bg-muted/40">
+                <div className="text-xs font-semibold text-primary whitespace-nowrap tabular-nums w-28">
+                  {entry.start_time.slice(0, 5)} – {entry.end_time.slice(0, 5)}
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-medium text-foreground">{entry.subjectName}</div>
+                  <div className="text-xs text-muted-foreground">{entry.className}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Recent uploads */}
