@@ -205,12 +205,12 @@ const ProfileTab = () => {
 // ── Appearance tab ─────────────────────────────────────────────────────────────
 
 const ACCENT_COLORS = [
-  { name: "Forest Green", value: "green",  primary: "#166534", className: "bg-[#166534]" },
-  { name: "Royal Blue",   value: "blue",   primary: "#1e40af", className: "bg-[#1e40af]" },
-  { name: "Purple",       value: "purple", primary: "#7B2D8B", className: "bg-[#7B2D8B]" },
-  { name: "Deep Red",     value: "red",    primary: "#b91c1c", className: "bg-[#b91c1c]" },
-  { name: "Teal",         value: "teal",   primary: "#0f766e", className: "bg-[#0f766e]" },
-  { name: "Amber",        value: "amber",  primary: "#d97706", className: "bg-[#d97706]" },
+  { name: "Forest Green", value: "green",  primary: "#166534", hsl: "143 64% 24%", className: "bg-[#166534]" },
+  { name: "Royal Blue",   value: "blue",   primary: "#1e40af", hsl: "226 71% 40%", className: "bg-[#1e40af]" },
+  { name: "Purple",       value: "purple", primary: "#7B2D8B", hsl: "290 51% 36%", className: "bg-[#7B2D8B]" },
+  { name: "Deep Red",     value: "red",    primary: "#b91c1c", hsl: "0 74% 42%",   className: "bg-[#b91c1c]" },
+  { name: "Teal",         value: "teal",   primary: "#0f766e", hsl: "175 77% 26%", className: "bg-[#0f766e]" },
+  { name: "Amber",        value: "amber",  primary: "#d97706", hsl: "32 95% 44%",  className: "bg-[#d97706]" },
 ];
 
 const AppearanceTab = () => {
@@ -227,8 +227,10 @@ const AppearanceTab = () => {
   const handleAccent = (color: typeof ACCENT_COLORS[0]) => {
     setAccent(color.value);
     localStorage.setItem("ibs-accent", color.value);
-    // Apply via CSS variable
-    document.documentElement.style.setProperty("--primary-accent", color.primary);
+    localStorage.setItem("ibs-accent-hsl", color.hsl);
+    const root = document.documentElement;
+    root.style.setProperty("--primary", color.hsl);
+    root.style.setProperty("--ring", color.hsl);
     toast({ title: `Accent colour changed to ${color.name}` });
   };
 
@@ -281,9 +283,9 @@ const AppearanceTab = () => {
         <h3 className="font-heading font-semibold text-foreground">Font Size</h3>
         <p className="text-sm text-muted-foreground">Adjust text size across the portal.</p>
         <div className="flex gap-2">
-          {[["Small", "14px"], ["Default", "16px"], ["Large", "18px"]].map(([label, size]) => (
+          {[["Small", "13px"], ["Default", "16px"], ["Large", "19px"]].map(([label, size]) => (
             <button key={label} onClick={() => { document.documentElement.style.fontSize = size; localStorage.setItem("ibs-fontsize", size); toast({ title: `Font size set to ${label}` }); }}
-              className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${localStorage.getItem("ibs-fontsize") === size || (!localStorage.getItem("ibs-fontsize") && size === "16px") ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-muted-foreground/40"}`}>
+              className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${(localStorage.getItem("ibs-fontsize") || "16px") === size ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-muted-foreground/40"}`}>
               {label}
             </button>
           ))}

@@ -12,4 +12,11 @@ document.documentElement.classList.toggle("dark", isDark);
 const savedFontSize = localStorage.getItem("ibs-fontsize");
 if (savedFontSize) document.documentElement.style.fontSize = savedFontSize;
 
+// Apply saved accent colour
+const savedAccentHsl = localStorage.getItem("ibs-accent-hsl");
+if (savedAccentHsl) {
+  document.documentElement.style.setProperty("--primary", savedAccentHsl);
+  document.documentElement.style.setProperty("--ring", savedAccentHsl);
+}
+
 createRoot(document.getElementById("root")!).render(<App />);
