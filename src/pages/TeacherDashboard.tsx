@@ -17,6 +17,7 @@ import EventsView from "@/components/EventsView";
 import MessagingView from "@/components/MessagingView";
 import ProfilePage from "@/components/ProfilePage";
 import { FinancesView } from "@/pages/AdminDashboard";
+import ReportCard from "@/components/ReportCard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const TeacherDashboard = () => {
@@ -275,6 +276,7 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
   const [selType, setSelType] = useState<"mid_term" | "end_of_term">("mid_term");
   const [reviewing, setReviewing] = useState<any | null>(null);
   const [headComment, setHeadComment] = useState("");
+  const [previewCard, setPreviewCard] = useState<{ studentId: string; termId: string } | null>(null);
 
   const classId = headClasses[0]?.id;
 
@@ -433,6 +435,16 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
         </div>
       )}
 
+      {/* Report card preview overlay */}
+      {previewCard && (
+        <ReportCard
+          studentId={previewCard.studentId}
+          termId={previewCard.termId}
+          resultType={selType}
+          onClose={() => setPreviewCard(null)}
+        />
+      )}
+
       {/* Review dialog */}
       <Dialog open={!!reviewing} onOpenChange={open => !open && setReviewing(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -499,6 +511,10 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
                   disabled={reviewing?.submission?.status === "approved"}
                 />
               </div>
+
+              <Button variant="outline" className="w-full gap-2" onClick={() => setPreviewCard({ studentId: reviewing.student.id, termId: selTerm })}>
+                <BookOpen size={15} /> Preview Report Card
+              </Button>
 
               {reviewing?.submission?.status !== "approved" && (
                 <Button className="w-full hero-gradient gap-2" onClick={() => submitReport.mutate({ studentId: reviewing.student.id, comment: headComment })} disabled={submitReport.isPending}>
@@ -909,8 +925,15 @@ export const UploadResults = () => {
     queryKey: ["my-subjects", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      const { data } = await supabase.from("subjects").select("*").eq("teacher_id", user.id);
-      return data || [];
+      const { data } = await supabase.from("subjects").select("*").eq("teacher_id", user.id).order("name");
+      const rows = data || [];
+      const classIds = [...new Set(rows.map((s: any) => s.class_id).filter(Boolean))];
+      let classMap: Record<string, string> = {};
+      if (classIds.length > 0) {
+        const { data: cls } = await supabase.from("classes").select("id, name").in("id", classIds as string[]);
+        (cls || []).forEach((c: any) => { classMap[c.id] = c.name; });
+      }
+      return rows.map((s: any) => ({ ...s, className: classMap[s.class_id] || "" }));
     },
     enabled: !!user,
   });
@@ -1001,7 +1024,11 @@ export const UploadResults = () => {
             <Select value={selSubject} onValueChange={v => { setSelSubject(v); setScores({}); }}>
               <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
               <SelectContent>
-                {subjects?.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                {subjects?.map((s: any) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}{s.className ? ` — ${s.className}` : ""}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -1028,7 +1055,7 @@ export const UploadResults = () => {
         {selectedSubject && selTerm && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
             <BookOpen size={13} className="text-primary" />
-            <span>Entering <strong>{selType === "mid_term" ? "Mid Term" : "End of Term"}</strong> scores for <strong>{selectedSubject?.name}</strong> — max <strong>{outOf}</strong> per student</span>
+            <span>Entering <strong>{selType === "mid_term" ? "Mid Term" : "End of Term"}</strong> scores for <strong>{selectedSubject?.name}{selectedSubject?.className ? ` — ${selectedSubject.className}` : ""}</strong> — max <strong>{outOf}</strong> per student</span>
           </div>
         )}
       </div>
@@ -1039,7 +1066,7 @@ export const UploadResults = () => {
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
             <div>
               <p className="font-heading font-semibold text-foreground">
-                {selectedSubject?.name} — {selType === "mid_term" ? "Mid Term" : "End of Term"}
+                {selectedSubject?.name}{selectedSubject?.className ? ` (${selectedSubject.className})` : ""} — {selType === "mid_term" ? "Mid Term" : "End of Term"}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">{classData.students.length} students · {filledCount} scores entered</p>
             </div>

@@ -13,14 +13,14 @@ interface ReportCardProps {
 }
 
 const GRADE_SCALE = [
-  { min: 28.5, max: 30,    letter: "A+", remark: "Outstanding", color: "#7B2D8B" },
-  { min: 27.0, max: 28.49, letter: "A",  remark: "Outstanding", color: "#4a0e6e" },
-  { min: 25.5, max: 26.99, letter: "B+", remark: "Proficient",  color: "#166534" },
-  { min: 24.0, max: 25.49, letter: "B",  remark: "Proficient",  color: "#166534" },
-  { min: 22.5, max: 23.99, letter: "C+", remark: "Capable",     color: "#1e40af" },
-  { min: 21.0, max: 22.49, letter: "C",  remark: "Capable",     color: "#1e40af" },
-  { min: 18.0, max: 20.99, letter: "D",  remark: "PTE",         color: "#c2410c" },
-  { min: 0,    max: 17.99, letter: "E",  remark: "NME",         color: "#b91c1c" },
+  { min: 28.5, max: 30,    letter: "A+", remark: "Outstanding", color: "#7B2D8B", range: "28.5 – 30"   },
+  { min: 27.0, max: 28.49, letter: "A",  remark: "Outstanding", color: "#4a0e6e", range: "27.0 – 28.4" },
+  { min: 25.5, max: 26.99, letter: "B+", remark: "Proficient",  color: "#166534", range: "25.5 – 26.9" },
+  { min: 24.0, max: 25.49, letter: "B",  remark: "Proficient",  color: "#166534", range: "24.0 – 25.4" },
+  { min: 22.5, max: 23.99, letter: "C+", remark: "Capable",     color: "#1e40af", range: "22.5 – 23.9" },
+  { min: 21.0, max: 22.49, letter: "C",  remark: "Capable",     color: "#1e40af", range: "21.0 – 22.4" },
+  { min: 18.0, max: 20.99, letter: "D",  remark: "PTE",         color: "#c2410c", range: "18.0 – 20.9" },
+  { min: 0,    max: 17.99, letter: "E",  remark: "NME",         color: "#b91c1c", range: "< 18"        },
 ];
 
 const getGradeInfo = (score: number) =>
@@ -30,10 +30,11 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
   const { data, isLoading } = useQuery({
     queryKey: ["report-card", studentId, termId, resultType],
     queryFn: async () => {
-      const [studentRes, termRes, resultsRes] = await Promise.all([
+      const [studentRes, termRes, resultsRes, submissionRes] = await Promise.all([
         supabase.from("students").select("*").eq("id", studentId).single(),
         supabase.from("terms").select("*").eq("id", termId).single(),
         supabase.from("results").select("*").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType),
+        supabase.from("report_submissions").select("head_teacher_comment").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType).maybeSingle(),
       ]);
       if (studentRes.error) throw studentRes.error;
 
@@ -75,13 +76,14 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
         term: termRes.data,
         results: results.map((r: any) => ({ ...r, subjectName: subjectMap[r.subject_id] || "—" })),
         subjectStats,
+        headTeacherComment: submissionRes.data?.head_teacher_comment || "",
       };
     },
   });
 
   const handlePrint = () => {
     if (!data) return;
-    const { student, term, results, subjectStats } = data;
+    const { student, term, results, subjectStats, headTeacherComment } = data;
     const totalObtainable = results.length * 30;
     const totalObtained = results.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
     const average = results.length > 0 ? totalObtained / results.length : 0;
@@ -125,8 +127,8 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
     }).join("");
 
     const gradeKeyRows = GRADE_SCALE.map(g =>
-      `<tr><td style="padding:2px 5px;border:1px solid #ccc">${g.min === 0 ? "< 18" : `${g.min}–${g.max}`}</td>
-      <td style="padding:2px 5px;border:1px solid #ccc;text-align:center;font-weight:bold">${g.letter}</td>
+      `<tr><td style="padding:2px 5px;border:1px solid #ccc">${g.range}</td>
+      <td style="padding:2px 5px;border:1px solid #ccc;text-align:center;font-weight:bold;color:${g.color}">${g.letter}</td>
       <td style="padding:2px 5px;border:1px solid #ccc">${g.remark}</td>
       <td style="padding:2px 5px;border:1px solid #ccc;background:${g.color};color:white;text-align:center">&nbsp;</td></tr>`
     ).join("");
@@ -180,8 +182,8 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
             <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">${scoreLabel}<br>Total (30)</th>
             <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">Grade</th>
             <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">Remark</th>
-            <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">Highest<br>in Class</th>
-            <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">Lowest<br>in Class</th>
+            <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">Highest Score<br>in Class</th>
+            <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">Lowest Score<br>in Class</th>
           </tr></thead><tbody>${subjectRows}</tbody></table>
       </td>
       <td style="border:1px solid #333;padding:8px;vertical-align:top;width:42%">
@@ -193,7 +195,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
             <th style="padding:3px 5px;text-align:left">Score</th><th style="padding:3px 5px">Grade</th>
             <th style="padding:3px 5px">Description</th><th style="padding:3px 5px">Colour</th>
           </tr></thead><tbody>${gradeKeyRows}</tbody></table>
-        <div style="font-size:8px;margin-top:4px;color:#555">N.B: PTE = PROGRESSING TOWARDS EXPECTATION | NME = NOT MEETING EXPECTATION</div>
+        <div style="font-size:8px;margin-top:4px;color:#555">N.B: PTE means PROGRESSING TOWARDS EXPECTATION and NME means NOT MEETING EXPECTATION</div>
       </td></tr></table>
     <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
       <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Teacher Comments</td></tr><tr>
@@ -202,7 +204,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Signature:</td></tr></table>
     <table style="width:100%;border:2px solid #333;border-top:0"><tr>
       <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Head Teacher Comments</td></tr><tr>
-      <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">&nbsp;</td>
+      <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headTeacherComment}</td>
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date:</td>
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Signature:</td></tr></table>
     </body></html>`;
@@ -223,7 +225,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
 
   if (!data) return null;
 
-  const { student, term, results, subjectStats } = data;
+  const { student, term, results, subjectStats, headTeacherComment } = data;
   const totalObtainable = results.length * 30;
   const totalObtained = results.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
   const average = results.length > 0 ? totalObtained / results.length : 0;
@@ -318,8 +320,8 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
                     <th className="text-center px-1 py-1.5 border-b border-l border-gray-400 font-semibold">{reportLabel}<br />Total (30)</th>
                     <th className="text-center px-1 py-1.5 border-b border-l border-gray-400 font-semibold">Grade</th>
                     <th className="text-center px-1 py-1.5 border-b border-l border-gray-400 font-semibold">Remark</th>
-                    <th className="text-center px-1 py-1.5 border-b border-l border-gray-400 font-semibold">Highest<br />in Class</th>
-                    <th className="text-center px-1 py-1.5 border-b border-l border-gray-400 font-semibold">Lowest<br />in Class</th>
+                    <th className="text-center px-1 py-1.5 border-b border-l border-gray-400 font-semibold">Highest Score<br />in Class</th>
+                    <th className="text-center px-1 py-1.5 border-b border-l border-gray-400 font-semibold">Lowest Score<br />in Class</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -368,21 +370,23 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
                 <thead>
                   <tr className="bg-gray-800 text-white">
                     <th className="px-1 py-0.5 text-left">Score</th>
-                    <th className="px-1 py-0.5">Grd</th>
-                    <th className="px-1 py-0.5">Desc</th>
+                    <th className="px-1 py-0.5">Grade</th>
+                    <th className="px-1 py-0.5">Description</th>
+                    <th className="px-1 py-0.5">Colour</th>
                   </tr>
                 </thead>
                 <tbody>
                   {GRADE_SCALE.map((g) => (
                     <tr key={g.letter}>
-                      <td className="border border-gray-300 px-1 py-0.5">{g.min === 0 ? "<18" : `${g.min}-${g.max}`}</td>
+                      <td className="border border-gray-300 px-1 py-0.5">{g.range}</td>
                       <td className="border border-gray-300 px-1 py-0.5 text-center font-bold" style={{ color: g.color }}>{g.letter}</td>
-                      <td className="border border-gray-300 px-1 py-0.5" style={{ color: g.color }}>{g.remark}</td>
+                      <td className="border border-gray-300 px-1 py-0.5">{g.remark}</td>
+                      <td className="border border-gray-300 px-1 py-0.5 text-center" style={{ background: g.color }}>&nbsp;</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <p className="text-[7px] text-gray-500 leading-tight">PTE = Progressing Towards Expectation · NME = Not Meeting Expectation</p>
+              <p className="text-[7px] text-gray-500 leading-tight">N.B: PTE means PROGRESSING TOWARDS EXPECTATION and NME means NOT MEETING EXPECTATION</p>
             </div>
           </div>
 
@@ -400,7 +404,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
           <div className="border-2 border-gray-800 border-t-0">
             <div className="bg-gray-100 px-2 py-1 font-bold border-b border-gray-400">Head Teacher Comments</div>
             <div className="grid grid-cols-3 divide-x divide-gray-400">
-              <div className="col-span-1 px-2 py-2 min-h-[32px]">&nbsp;</div>
+              <div className="col-span-1 px-2 py-2 min-h-[32px]">{headTeacherComment || <span className="text-gray-400 italic">Pending</span>}</div>
               <div className="px-2 py-2">Date: ___________</div>
               <div className="px-2 py-2">Signature: ___________</div>
             </div>
