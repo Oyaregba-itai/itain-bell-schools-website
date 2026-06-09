@@ -78,8 +78,8 @@ CREATE POLICY "subject_assignments_write" ON subject_assignments
   FOR ALL TO authenticated
   USING (
     EXISTS (
-      SELECT 1 FROM profiles
-      WHERE user_id = auth.uid() AND role IN ('admin', 'super_admin')
+      SELECT 1 FROM user_roles
+      WHERE user_id = auth.uid() AND role = 'admin'
     )
   );
 
