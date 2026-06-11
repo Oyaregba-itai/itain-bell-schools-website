@@ -1283,7 +1283,7 @@ const StudentList = ({ onSelect }: { onSelect: (id: string) => void }) => {
   const [search, setSearch] = useState("");
   const [newStudent, setNewStudent] = useState({
     first_name: "", last_name: "", class_id: "", gender: "",
-    date_of_birth: "", school_section: "", admission_number: "",
+    date_of_birth: "", school_section: "",
   });
 
   const { data: students } = useQuery({
@@ -1318,6 +1318,19 @@ const StudentList = ({ onSelect }: { onSelect: (id: string) => void }) => {
 
   const addStudent = useMutation({
     mutationFn: async () => {
+      const { data: activeTerm } = await supabase.from("terms").select("academic_year").eq("is_active", true).maybeSingle();
+      const yearPrefix = activeTerm?.academic_year?.split("/")[0] || new Date().getFullYear().toString();
+      const { data: existing } = await supabase
+        .from("students")
+        .select("admission_number")
+        .like("admission_number", `IBS/${yearPrefix}/%`)
+        .order("admission_number", { ascending: false })
+        .limit(1);
+      let nextNum = 1;
+      const match = existing?.[0]?.admission_number?.match(/(\d+)$/);
+      if (match) nextNum = parseInt(match[1], 10) + 1;
+      const newId = `IBS/${yearPrefix}/${String(nextNum).padStart(4, "0")}`;
+
       const { error } = await supabase.from("students").insert([{
         first_name: newStudent.first_name,
         last_name: newStudent.last_name,
@@ -1326,15 +1339,17 @@ const StudentList = ({ onSelect }: { onSelect: (id: string) => void }) => {
         gender: newStudent.gender || null,
         date_of_birth: newStudent.date_of_birth || null,
         school_section: newStudent.school_section || null,
-        admission_number: newStudent.admission_number || null,
+        admission_number: newId,
+        student_id: newId,
       }]);
       if (error) throw error;
+      return newId;
     },
-    onSuccess: () => {
-      toast({ title: "Student added" });
+    onSuccess: (newId) => {
+      toast({ title: "Student added", description: `Admission number: ${newId}` });
       queryClient.invalidateQueries({ queryKey: ["all-students"] });
       setAddOpen(false);
-      setNewStudent({ first_name: "", last_name: "", class_id: "", gender: "", date_of_birth: "", school_section: "", admission_number: "" });
+      setNewStudent({ first_name: "", last_name: "", class_id: "", gender: "", date_of_birth: "", school_section: "" });
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -1401,10 +1416,7 @@ const StudentList = ({ onSelect }: { onSelect: (id: string) => void }) => {
                 <Input type="date" value={newStudent.date_of_birth} onChange={e => setNewStudent({ ...newStudent, date_of_birth: e.target.value })} />
               </div>
             </div>
-            <div>
-              <Label>Admission Number</Label>
-              <Input value={newStudent.admission_number} onChange={e => setNewStudent({ ...newStudent, admission_number: e.target.value })} placeholder="e.g. IBS/2024/001" />
-            </div>
+            <p className="text-xs text-muted-foreground">An admission number / student ID will be generated automatically.</p>
             <Button className="w-full hero-gradient" onClick={() => addStudent.mutate()} disabled={addStudent.isPending || !newStudent.first_name || !newStudent.last_name}>
               {addStudent.isPending ? "Adding..." : "Add Student"}
             </Button>
