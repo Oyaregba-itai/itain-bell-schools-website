@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle, Send, CheckCircle, Banknote, Receipt, TrendingDown, CreditCard, Calendar, Megaphone, Clock } from "lucide-react";
+import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle, Send, CheckCircle, Banknote, Receipt, TrendingDown, CreditCard, Calendar, Megaphone, Clock, UserPlus } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import MessagingView from "@/components/MessagingView";
@@ -2830,6 +2830,94 @@ const getGradeLetterAdmin = (score: number, outOf: number = 30): string => {
   return "E";
 };
 
+const ScoreUploadRequestsPanel = () => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: requests } = useQuery({
+    queryKey: ["score-upload-requests-admin"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("score_upload_requests").select("*").eq("status", "pending").order("requested_at", { ascending: false });
+      if (error) throw error;
+      const rows = data || [];
+      const headIds = [...new Set(rows.map((r: any) => r.head_teacher_id).filter(Boolean))];
+      const subjectIds = [...new Set(rows.map((r: any) => r.subject_id).filter(Boolean))];
+      const classIds = [...new Set(rows.map((r: any) => r.class_id).filter(Boolean))];
+      const [hRes, sRes, cRes] = await Promise.all([
+        headIds.length > 0 ? supabase.from("profiles").select("user_id, full_name").in("user_id", headIds as string[]) : { data: [] },
+        subjectIds.length > 0 ? supabase.from("subjects").select("id, name").in("id", subjectIds as string[]) : { data: [] },
+        classIds.length > 0 ? supabase.from("classes").select("id, name").in("id", classIds as string[]) : { data: [] },
+      ]);
+      const hMap: Record<string, string> = {};
+      const sMap: Record<string, string> = {};
+      const cMap: Record<string, string> = {};
+      (hRes.data || []).forEach((h: any) => { hMap[h.user_id] = h.full_name; });
+      (sRes.data || []).forEach((s: any) => { sMap[s.id] = s.name; });
+      (cRes.data || []).forEach((c: any) => { cMap[c.id] = c.name; });
+      return rows.map((r: any) => ({ ...r, headName: hMap[r.head_teacher_id] || "—", subjectName: sMap[r.subject_id] || "—", className: cMap[r.class_id] || "—" }));
+    },
+  });
+
+  const reviewRequest = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: "approved" | "denied" }) => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      const { error } = await supabase.from("score_upload_requests").update({ status, reviewed_at: new Date().toISOString(), reviewed_by: u?.id }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, vars) => {
+      toast({ title: vars.status === "approved" ? "Request approved" : "Request denied" });
+      queryClient.invalidateQueries({ queryKey: ["score-upload-requests-admin"] });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  if (!requests?.length) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <ClipboardCheck size={18} className="text-blue-600" />
+        <h3 className="text-lg font-heading text-foreground">Score Upload Requests</h3>
+        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">{requests.length} pending</span>
+      </div>
+
+      <div className="bg-card rounded-xl shadow-card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-muted">
+            <tr>
+              <th className="text-left p-3 font-medium text-muted-foreground">Head Teacher</th>
+              <th className="text-left p-3 font-medium text-muted-foreground">Class</th>
+              <th className="text-left p-3 font-medium text-muted-foreground">Subject</th>
+              <th className="p-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {requests.map((req: any) => (
+              <tr key={req.id} className="border-t border-border">
+                <td className="p-3 font-medium text-foreground">{req.headName}</td>
+                <td className="p-3 text-muted-foreground">{req.className}</td>
+                <td className="p-3 text-muted-foreground">{req.subjectName}</td>
+                <td className="p-3">
+                  <div className="flex gap-2 justify-end">
+                    <button onClick={() => reviewRequest.mutate({ id: req.id, status: "approved" })} disabled={reviewRequest.isPending}
+                      className="flex items-center gap-1 text-xs bg-green-600 text-white px-2.5 py-1 rounded-lg hover:bg-green-700 transition-colors font-medium">
+                      <Check size={11} /> Approve
+                    </button>
+                    <button onClick={() => reviewRequest.mutate({ id: req.id, status: "denied" })} disabled={reviewRequest.isPending}
+                      className="flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2.5 py-1 rounded-lg hover:bg-red-200 transition-colors font-medium">
+                      <X size={11} /> Deny
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 const SubmittedReportCards = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -3211,6 +3299,9 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
           </div>}
         </DialogContent>
       </Dialog>
+
+      {/* ── Score upload access requests (from class teachers) ── */}
+      <ScoreUploadRequestsPanel />
 
       {/* ── Submitted Report Cards (from class teachers) ── */}
       <SubmittedReportCards />

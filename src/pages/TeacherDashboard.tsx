@@ -261,7 +261,7 @@ const TeacherOverview = ({ onTabChange }: { onTabChange: (tab: string) => void }
           {overview?.mySubjects?.length ? (
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
               {overview.mySubjects.map((s: any) => (
-                <div key={s.id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40">
+                <div key={s.class_id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40">
                   <span className="text-sm font-medium text-foreground">{s.name}</span>
                   <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{s.className}</span>
                 </div>
@@ -699,7 +699,7 @@ export const MySubjectsView = () => {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {classes.map((s: any) => (
             <button
-              key={s.id}
+              key={s.class_id}
               onClick={() => setViewingClass({ classId: s.class_id, className: s.className, subjectName: viewingSubject })}
               className="bg-card rounded-xl p-5 shadow-card border border-border text-left hover:border-primary/40 hover:shadow-md transition-all group"
             >
@@ -1045,19 +1045,92 @@ export const UploadResults = () => {
     queryKey: ["my-subjects", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      const { data } = await supabase
+      const { data: own } = await supabase
         .from("subject_assignments")
         .select("subject_id, class_id, teacher_id, subjects(id, name), classes(id, name)")
         .eq("teacher_id", user.id);
-      return (data || []).map((a: any) => ({
+      const ownList = (own || []).map((a: any) => ({
+        key: `${a.subject_id}__${a.class_id}`,
         id: a.subject_id,
         class_id: a.class_id,
         teacher_id: a.teacher_id,
         name: a.subjects?.name || "—",
         className: a.classes?.name || "",
       }));
+
+      // Subjects the head teacher has been approved to upload for, beyond their own
+      const { data: approved } = await supabase
+        .from("score_upload_requests")
+        .select("subject_id, class_id, subjects(id, name), classes(id, name)")
+        .eq("head_teacher_id", user.id)
+        .eq("status", "approved");
+      const approvedList = (approved || [])
+        .map((a: any) => ({
+          key: `${a.subject_id}__${a.class_id}`,
+          id: a.subject_id,
+          class_id: a.class_id,
+          teacher_id: null,
+          name: a.subjects?.name || "—",
+          className: a.classes?.name || "",
+        }))
+        .filter((a: any) => !ownList.some((o: any) => o.id === a.id && o.class_id === a.class_id));
+
+      return [...ownList, ...approvedList];
     },
     enabled: !!user,
+  });
+
+  // Head-of-class: subjects taught by other teachers in their class, for requesting upload access
+  const { data: headClasses } = useQuery({
+    queryKey: ["head-classes-upload", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data } = await supabase.from("classes").select("id, name").eq("head_teacher_id", user.id);
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
+  const { data: requestableSubjects } = useQuery({
+    queryKey: ["score-upload-requests", user?.id, headClasses],
+    enabled: !!user && (headClasses?.length ?? 0) > 0,
+    queryFn: async () => {
+      const classIds = (headClasses || []).map((c: any) => c.id);
+      const [{ data: assignments }, { data: requests }] = await Promise.all([
+        supabase
+          .from("subject_assignments")
+          .select("subject_id, class_id, teacher_id, subjects(id, name), classes(id, name)")
+          .in("class_id", classIds),
+        supabase.from("score_upload_requests").select("*").eq("head_teacher_id", user!.id),
+      ]);
+      const requestMap: Record<string, any> = {};
+      (requests || []).forEach((r: any) => { requestMap[`${r.subject_id}_${r.class_id}`] = r; });
+      return (assignments || [])
+        .filter((a: any) => a.teacher_id !== user!.id)
+        .map((a: any) => ({
+          subject_id: a.subject_id,
+          class_id: a.class_id,
+          name: a.subjects?.name || "—",
+          className: a.classes?.name || "",
+          request: requestMap[`${a.subject_id}_${a.class_id}`] || null,
+        }));
+    },
+  });
+
+  const requestAccess = useMutation({
+    mutationFn: async ({ subjectId, classId }: { subjectId: string; classId: string }) => {
+      const { error } = await supabase.from("score_upload_requests").insert({
+        head_teacher_id: user!.id,
+        subject_id: subjectId,
+        class_id: classId,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Request sent to admin" });
+      queryClient.invalidateQueries({ queryKey: ["score-upload-requests"] });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
   const { data: terms } = useQuery({
@@ -1068,17 +1141,17 @@ export const UploadResults = () => {
     },
   });
 
-  const selectedSubject = subjects?.find((s: any) => s.id === selSubject);
+  const selectedSubject = subjects?.find((s: any) => s.key === selSubject);
 
   const { data: classData } = useQuery({
     queryKey: ["upload-class-data", selSubject, selTerm, selType],
-    enabled: !!(selSubject && selTerm),
+    enabled: !!(selectedSubject && selTerm),
     queryFn: async () => {
       const { data: students } = await supabase.from("students").select("*").eq("class_id", selectedSubject?.class_id).order("full_name");
       const studentList = students || [];
       const studentIds = studentList.map((s: any) => s.id);
       const { data: existing } = studentIds.length > 0
-        ? await supabase.from("results").select("*").eq("subject_id", selSubject).eq("term_id", selTerm).eq("result_type", selType).in("student_id", studentIds)
+        ? await supabase.from("results").select("*").eq("subject_id", selectedSubject?.id).eq("term_id", selTerm).eq("result_type", selType).in("student_id", studentIds)
         : { data: [] };
       const existingMap: Record<string, any> = {};
       (existing || []).forEach((r: any) => { existingMap[r.student_id] = r; });
@@ -1090,7 +1163,7 @@ export const UploadResults = () => {
   const initDone = !!(classData && selSubject && selTerm);
 
   const saveAll = async () => {
-    if (!user || !classData) return;
+    if (!user || !classData || !selectedSubject) return;
     setSaving(true);
     let saved = 0, errors = 0;
     for (const student of classData.students) {
@@ -1110,7 +1183,7 @@ export const UploadResults = () => {
         } else {
           await supabase.from("results").insert({
             student_id: student.id,
-            subject_id: selSubject,
+            subject_id: selectedSubject.id,
             term_id: selTerm,
             result_type: selType,
             total_score: scoreVal,
@@ -1147,7 +1220,7 @@ export const UploadResults = () => {
               <SelectTrigger><SelectValue placeholder="Select subject" /></SelectTrigger>
               <SelectContent>
                 {subjects?.map((s: any) => (
-                  <SelectItem key={s.id} value={s.id}>
+                  <SelectItem key={s.key} value={s.key}>
                     {s.name}{s.className ? ` — ${s.className}` : ""}
                   </SelectItem>
                 ))}
@@ -1181,6 +1254,36 @@ export const UploadResults = () => {
           </div>
         )}
       </div>
+
+      {/* Request access to other subjects in your class (head of class only) */}
+      {(requestableSubjects?.length ?? 0) > 0 && (
+        <div className="bg-card rounded-xl p-5 shadow-card space-y-3">
+          <div>
+            <h4 className="font-heading font-semibold text-foreground text-sm">Request Access to Other Subjects</h4>
+            <p className="text-xs text-muted-foreground mt-0.5">As head of class, you can request permission to upload scores for subjects taught by other teachers in your class.</p>
+          </div>
+          <div className="space-y-2">
+            {requestableSubjects!.map((item: any) => (
+              <div key={`${item.subject_id}_${item.class_id}`} className="flex items-center justify-between bg-muted/40 rounded-lg px-3 py-2">
+                <span className="text-sm text-foreground">{item.name}{item.className ? ` — ${item.className}` : ""}</span>
+                {item.request?.status === "approved" ? (
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Approved</span>
+                ) : item.request?.status === "pending" ? (
+                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">Pending approval</span>
+                ) : item.request?.status === "denied" ? (
+                  <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Denied</span>
+                ) : (
+                  <Button size="sm" variant="outline" className="h-7 text-xs"
+                    onClick={() => requestAccess.mutate({ subjectId: item.subject_id, classId: item.class_id })}
+                    disabled={requestAccess.isPending}>
+                    Request Access
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Batch entry table */}
       {classData && classData.students.length > 0 && (
