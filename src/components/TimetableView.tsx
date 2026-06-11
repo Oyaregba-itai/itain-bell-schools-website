@@ -76,7 +76,7 @@ type TimetableEntry = {
 };
 
 const TimetableView = () => {
-  const { role } = useAuth();
+  const { user, role } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
@@ -85,7 +85,7 @@ const TimetableView = () => {
   const [selectedClass, setSelectedClass] = useState<string>("all");
   const [form, setForm] = useState({ class_id: "", subject_id: "", day_of_week: "", start_time: "", end_time: "" });
 
-  const { data: classes } = useQuery({
+  const { data: allClasses } = useQuery({
     queryKey: ["classes"],
     queryFn: async () => {
       const { data, error } = await supabase.from("classes").select("*").order("name");
@@ -93,6 +93,26 @@ const TimetableView = () => {
       return data || [];
     },
   });
+
+  // Teachers only see the timetable for classes they teach a subject in, or head
+  const { data: myClassIds } = useQuery({
+    queryKey: ["my-timetable-classes", user?.id],
+    enabled: role === "teacher" && !!user?.id,
+    queryFn: async () => {
+      const [{ data: assignments }, { data: headOf }] = await Promise.all([
+        supabase.from("subject_assignments").select("class_id").eq("teacher_id", user!.id),
+        supabase.from("classes").select("id").eq("head_teacher_id", user!.id),
+      ]);
+      return new Set([
+        ...(assignments || []).map((a: any) => a.class_id),
+        ...(headOf || []).map((c: any) => c.id),
+      ]);
+    },
+  });
+
+  const classes = role === "teacher"
+    ? (allClasses || []).filter((c: any) => myClassIds?.has(c.id))
+    : allClasses;
 
   const { data: subjects } = useQuery({
     queryKey: ["subjects"],
@@ -117,14 +137,21 @@ const TimetableView = () => {
   });
 
   const { data: entries } = useQuery({
-    queryKey: ["timetable", selectedClass],
+    queryKey: ["timetable", selectedClass, role === "teacher" ? [...(myClassIds || [])] : null],
+    enabled: role !== "teacher" || !!myClassIds,
     queryFn: async () => {
       let query = supabase
         .from("timetable_entries")
         .select("*")
         .order("day_of_week")
         .order("start_time");
-      if (selectedClass !== "all") query = query.eq("class_id", selectedClass);
+      if (selectedClass !== "all") {
+        query = query.eq("class_id", selectedClass);
+      } else if (role === "teacher") {
+        const ids = [...(myClassIds || [])];
+        if (ids.length === 0) return [] as TimetableEntry[];
+        query = query.in("class_id", ids);
+      }
       const { data, error } = await query;
       if (error) throw error;
       return (data || []) as TimetableEntry[];
@@ -198,15 +225,17 @@ const TimetableView = () => {
       <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
         <h3 className="text-lg font-heading text-foreground">Timetable</h3>
         <div className="flex items-center gap-3">
-          <Select value={selectedClass} onValueChange={setSelectedClass}>
-            <SelectTrigger className="w-48"><SelectValue placeholder="All classes" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Classes</SelectItem>
-              {classes?.map((c: any) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {(role !== "teacher" || (classes?.length ?? 0) > 1) && (
+            <Select value={selectedClass} onValueChange={setSelectedClass}>
+              <SelectTrigger className="w-48"><SelectValue placeholder="All classes" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{role === "teacher" ? "My Classes" : "All Classes"}</SelectItem>
+                {classes?.map((c: any) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           {role === "admin" && (
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
