@@ -2209,10 +2209,10 @@ const SubjectDetail = ({ subjectName, onBack }: { subjectName: string; onBack: (
             <p className="text-sm text-muted-foreground">Subject: <span className="font-medium text-foreground">{subjectName}</span></p>
             <div>
               <Label>Teacher</Label>
-              <Select value={editingRow.teacher_id || ""} onValueChange={v => setEditingRow({ ...editingRow, teacher_id: v })}>
+              <Select value={editingRow.teacher_id || NONE} onValueChange={v => setEditingRow({ ...editingRow, teacher_id: v === NONE ? "" : v })}>
                 <SelectTrigger><SelectValue placeholder="Select teacher" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">— Unassigned —</SelectItem>
+                  <SelectItem value={NONE}>— Unassigned —</SelectItem>
                   {teachers?.map((t: any) => <SelectItem key={t.user_id} value={t.user_id}>{t.full_name}</SelectItem>)}
                 </SelectContent>
               </Select>
