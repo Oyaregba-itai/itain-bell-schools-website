@@ -1,7 +1,7 @@
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, Users, BookOpen, GraduationCap, BarChart3, Calendar, Megaphone, Clock, Menu, ArrowLeft, MessageCircle, UserPlus, Banknote } from "lucide-react";
+import { LogOut, Users, BookOpen, GraduationCap, BarChart3, Calendar, Megaphone, Clock, Menu, ArrowLeft, MessageCircle, UserPlus, Banknote, ClipboardCheck } from "lucide-react";
 import { ReactNode, useState } from "react";
 import schoolLogo from "@/assets/school-logo.png";
 
@@ -29,6 +29,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange, extraTabs = [], tab
     { id: "terms", label: "Terms", icon: Calendar },
     { id: "events", label: "Events", icon: Calendar },
     { id: "results", label: "All Results", icon: BarChart3 },
+    { id: "requests", label: "Requests", icon: ClipboardCheck },
     { id: "finances", label: "Finances", icon: Banknote },
     { id: "announcements", label: "Announcements", icon: Megaphone },
     { id: "timetable", label: "Timetable", icon: Clock },

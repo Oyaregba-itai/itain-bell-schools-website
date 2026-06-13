@@ -60,7 +60,7 @@ const AdminDashboard = () => {
     : [];
 
   return (
-    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} extraTabs={extraTabs} tabBadges={{ results: pendingResultsCount || 0 }}>
+    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} extraTabs={extraTabs} tabBadges={{ requests: pendingResultsCount || 0 }}>
       {activeTab === "overview" && <AdminOverview />}
       {activeTab === "profile" && <ProfilePage />}
       {activeTab === "users" && <ManageUsers />}
@@ -71,6 +71,7 @@ const AdminDashboard = () => {
       {activeTab === "admissions" && <ManageAdmissions />}
       {activeTab === "events" && <ManageEvents />}
       {activeTab === "results" && <ViewAllResults isSuperAdmin={isSuperAdmin} />}
+      {activeTab === "requests" && <RequestsPanel />}
       {activeTab === "finances" && <FinancesView />}
       {activeTab === "announcements" && <AnnouncementsView />}
       {activeTab === "timetable" && <TimetableView />}
@@ -302,13 +303,13 @@ const AdminOverview = () => {
       {(pendingSubmissions ?? 0) > 0 && (
         <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
           <ClipboardCheck size={16} className="flex-shrink-0" />
-          <span><strong>{pendingSubmissions} report card{pendingSubmissions !== 1 ? "s" : ""}</strong> submitted by class teachers and awaiting your approval. Go to <strong>All Results</strong> to review.</span>
+          <span><strong>{pendingSubmissions} report card{pendingSubmissions !== 1 ? "s" : ""}</strong> submitted by class teachers and awaiting your approval. Go to <strong>Requests</strong> to review.</span>
         </div>
       )}
       {(pendingUploadRequests ?? 0) > 0 && (
         <div className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 text-sm text-purple-700">
           <ClipboardCheck size={16} className="flex-shrink-0" />
-          <span><strong>{pendingUploadRequests} score upload request{pendingUploadRequests !== 1 ? "s" : ""}</strong> from head teachers awaiting your approval. Go to <strong>All Results</strong> to review.</span>
+          <span><strong>{pendingUploadRequests} score upload request{pendingUploadRequests !== 1 ? "s" : ""}</strong> from head teachers awaiting your approval. Go to <strong>Requests</strong> to review.</span>
         </div>
       )}
 
@@ -2867,6 +2868,37 @@ const getGradeLetterAdmin = (score: number, outOf: number = 30): string => {
   return "E";
 };
 
+const RequestsPanel = () => {
+  const { data: counts } = useQuery({
+    queryKey: ["admin-requests-counts"],
+    queryFn: async () => {
+      const [reqsRes, subsRes] = await Promise.all([
+        supabase.from("score_upload_requests").select("id", { count: "exact" }).eq("status", "pending"),
+        supabase.from("report_submissions").select("id", { count: "exact" }).eq("status", "submitted"),
+      ]);
+      return (reqsRes.count || 0) + (subsRes.count || 0);
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-heading text-foreground">Requests</h3>
+        <p className="text-sm text-muted-foreground">Score upload access requests and submitted report cards awaiting your approval.</p>
+      </div>
+
+      {counts === 0 && (
+        <div className="bg-card rounded-xl p-8 shadow-card text-center text-sm text-muted-foreground">
+          No pending requests right now.
+        </div>
+      )}
+
+      <ScoreUploadRequestsPanel />
+      <SubmittedReportCards />
+    </div>
+  );
+};
+
 const ScoreUploadRequestsPanel = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -2906,6 +2938,7 @@ const ScoreUploadRequestsPanel = () => {
       queryClient.invalidateQueries({ queryKey: ["score-upload-requests-admin"] });
       queryClient.invalidateQueries({ queryKey: ["pending-upload-requests-count"] });
       queryClient.invalidateQueries({ queryKey: ["admin-pending-results-count"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-requests-counts"] });
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -3018,6 +3051,7 @@ const SubmittedReportCards = () => {
       queryClient.invalidateQueries({ queryKey: ["submitted-report-cards"] });
       queryClient.invalidateQueries({ queryKey: ["pending-submissions-count"] });
       queryClient.invalidateQueries({ queryKey: ["admin-pending-results-count"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-requests-counts"] });
       setPreviewSub(null);
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
@@ -3339,12 +3373,6 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
           </div>}
         </DialogContent>
       </Dialog>
-
-      {/* ── Score upload access requests (from class teachers) ── */}
-      <ScoreUploadRequestsPanel />
-
-      {/* ── Submitted Report Cards (from class teachers) ── */}
-      <SubmittedReportCards />
 
       {/* ── Live Report Card Preview ── */}
       <LiveReportCardPreview
