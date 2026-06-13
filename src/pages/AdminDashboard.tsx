@@ -39,6 +39,17 @@ const AdminDashboard = () => {
     enabled: !!user,
   });
 
+  const { data: pendingResultsCount } = useQuery({
+    queryKey: ["admin-pending-results-count"],
+    queryFn: async () => {
+      const [subsRes, reqsRes] = await Promise.all([
+        supabase.from("report_submissions").select("id", { count: "exact" }).eq("status", "submitted"),
+        supabase.from("score_upload_requests").select("id", { count: "exact" }).eq("status", "pending"),
+      ]);
+      return (subsRes.count || 0) + (reqsRes.count || 0);
+    },
+  });
+
   const teachesSubjects = (ownSubjects?.length ?? 0) > 0;
   const extraTabs = teachesSubjects
     ? [
@@ -49,7 +60,7 @@ const AdminDashboard = () => {
     : [];
 
   return (
-    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} extraTabs={extraTabs}>
+    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} extraTabs={extraTabs} tabBadges={{ results: pendingResultsCount || 0 }}>
       {activeTab === "overview" && <AdminOverview />}
       {activeTab === "profile" && <ProfilePage />}
       {activeTab === "users" && <ManageUsers />}
@@ -205,6 +216,14 @@ const AdminOverview = () => {
     },
   });
 
+  const { data: pendingUploadRequests } = useQuery({
+    queryKey: ["pending-upload-requests-count"],
+    queryFn: async () => {
+      const { count } = await supabase.from("score_upload_requests").select("id", { count: "exact" }).eq("status", "pending");
+      return count || 0;
+    },
+  });
+
   const { data: upcomingEvents } = useQuery({
     queryKey: ["upcoming-events-overview"],
     queryFn: async () => {
@@ -284,6 +303,12 @@ const AdminOverview = () => {
         <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
           <ClipboardCheck size={16} className="flex-shrink-0" />
           <span><strong>{pendingSubmissions} report card{pendingSubmissions !== 1 ? "s" : ""}</strong> submitted by class teachers and awaiting your approval. Go to <strong>All Results</strong> to review.</span>
+        </div>
+      )}
+      {(pendingUploadRequests ?? 0) > 0 && (
+        <div className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 text-sm text-purple-700">
+          <ClipboardCheck size={16} className="flex-shrink-0" />
+          <span><strong>{pendingUploadRequests} score upload request{pendingUploadRequests !== 1 ? "s" : ""}</strong> from head teachers awaiting your approval. Go to <strong>All Results</strong> to review.</span>
         </div>
       )}
 
@@ -2879,6 +2904,8 @@ const ScoreUploadRequestsPanel = () => {
     onSuccess: (_data, vars) => {
       toast({ title: vars.status === "approved" ? "Request approved" : "Request denied" });
       queryClient.invalidateQueries({ queryKey: ["score-upload-requests-admin"] });
+      queryClient.invalidateQueries({ queryKey: ["pending-upload-requests-count"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-pending-results-count"] });
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -2990,6 +3017,7 @@ const SubmittedReportCards = () => {
       toast({ title: "Report card approved — parents notified" });
       queryClient.invalidateQueries({ queryKey: ["submitted-report-cards"] });
       queryClient.invalidateQueries({ queryKey: ["pending-submissions-count"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-pending-results-count"] });
       setPreviewSub(null);
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),

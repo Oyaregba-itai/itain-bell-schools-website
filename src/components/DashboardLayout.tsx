@@ -10,9 +10,10 @@ interface DashboardLayoutProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   extraTabs?: { id: string; label: string; icon: any }[];
+  tabBadges?: Record<string, number>;
 }
 
-const DashboardLayout = ({ children, activeTab, onTabChange, extraTabs = [] }: DashboardLayoutProps) => {
+const DashboardLayout = ({ children, activeTab, onTabChange, extraTabs = [], tabBadges = {} }: DashboardLayoutProps) => {
   const { profile, role, signOut } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -89,6 +90,11 @@ const DashboardLayout = ({ children, activeTab, onTabChange, extraTabs = [] }: D
               >
                 <tab.icon size={18} />
                 {tab.label}
+                {tabBadges[tab.id] > 0 && (
+                  <span className="ml-auto bg-red-500 text-white text-xs font-semibold rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">
+                    {tabBadges[tab.id]}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
