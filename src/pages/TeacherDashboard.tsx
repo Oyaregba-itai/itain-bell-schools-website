@@ -1141,6 +1141,13 @@ export const UploadResults = () => {
     },
   });
 
+  useEffect(() => {
+    if (!selTerm && terms?.length) {
+      const active = terms.find((t: any) => t.is_active);
+      if (active) setSelTerm(active.id);
+    }
+  }, [terms, selTerm]);
+
   const selectedSubject = subjects?.find((s: any) => s.key === selSubject);
 
   const { data: classData } = useQuery({

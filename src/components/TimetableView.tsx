@@ -110,8 +110,23 @@ const TimetableView = () => {
     },
   });
 
+  // Parents only see the timetable for their children's classes
+  const { data: myChildClassIds } = useQuery({
+    queryKey: ["my-children-timetable-classes", user?.id],
+    enabled: role === "parent" && !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("parent_students")
+        .select("students:student_id(class_id)")
+        .eq("parent_id", user!.id);
+      return new Set((data || []).map((r: any) => r.students?.class_id).filter(Boolean));
+    },
+  });
+
   const classes = role === "teacher"
     ? (allClasses || []).filter((c: any) => myClassIds?.has(c.id))
+    : role === "parent"
+    ? (allClasses || []).filter((c: any) => myChildClassIds?.has(c.id))
     : allClasses;
 
   const { data: subjects } = useQuery({
@@ -137,8 +152,13 @@ const TimetableView = () => {
   });
 
   const { data: entries } = useQuery({
-    queryKey: ["timetable", selectedClass, role === "teacher" ? [...(myClassIds || [])] : null],
-    enabled: role !== "teacher" || !!myClassIds,
+    queryKey: [
+      "timetable",
+      selectedClass,
+      role === "teacher" ? [...(myClassIds || [])] : null,
+      role === "parent" ? [...(myChildClassIds || [])] : null,
+    ],
+    enabled: (role !== "teacher" || !!myClassIds) && (role !== "parent" || !!myChildClassIds),
     queryFn: async () => {
       let query = supabase
         .from("timetable_entries")
@@ -149,6 +169,10 @@ const TimetableView = () => {
         query = query.eq("class_id", selectedClass);
       } else if (role === "teacher") {
         const ids = [...(myClassIds || [])];
+        if (ids.length === 0) return [] as TimetableEntry[];
+        query = query.in("class_id", ids);
+      } else if (role === "parent") {
+        const ids = [...(myChildClassIds || [])];
         if (ids.length === 0) return [] as TimetableEntry[];
         query = query.in("class_id", ids);
       }
@@ -225,11 +249,13 @@ const TimetableView = () => {
       <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
         <h3 className="text-lg font-heading text-foreground">Timetable</h3>
         <div className="flex items-center gap-3">
-          {(role !== "teacher" || (classes?.length ?? 0) > 1) && (
+          {(role !== "teacher" && role !== "parent" || (classes?.length ?? 0) > 1) && (
             <Select value={selectedClass} onValueChange={setSelectedClass}>
               <SelectTrigger className="w-48"><SelectValue placeholder="All classes" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{role === "teacher" ? "My Classes" : "All Classes"}</SelectItem>
+                <SelectItem value="all">
+                  {role === "teacher" ? "My Classes" : role === "parent" ? "My Children's Classes" : "All Classes"}
+                </SelectItem>
                 {classes?.map((c: any) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
