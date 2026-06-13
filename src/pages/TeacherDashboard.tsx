@@ -1101,7 +1101,7 @@ export const UploadResults = () => {
           .from("subject_assignments")
           .select("subject_id, class_id, teacher_id, subjects(id, name), classes(id, name)")
           .in("class_id", classIds),
-        supabase.from("score_upload_requests").select("*").eq("head_teacher_id", user!.id),
+        supabase.from("score_upload_requests").select("*").eq("head_teacher_id", user!.id).order("requested_at", { ascending: true }),
       ]);
       const requestMap: Record<string, any> = {};
       (requests || []).forEach((r: any) => { requestMap[`${r.subject_id}_${r.class_id}`] = r; });
@@ -1286,7 +1286,14 @@ export const UploadResults = () => {
                 ) : item.request?.status === "pending" ? (
                   <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">Pending approval</span>
                 ) : item.request?.status === "denied" ? (
-                  <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Denied</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Denied</span>
+                    <Button size="sm" variant="outline" className="h-7 text-xs"
+                      onClick={() => requestAccess.mutate({ subjectId: item.subject_id, classId: item.class_id })}
+                      disabled={requestAccess.isPending}>
+                      Request Again
+                    </Button>
+                  </div>
                 ) : (
                   <Button size="sm" variant="outline" className="h-7 text-xs"
                     onClick={() => requestAccess.mutate({ subjectId: item.subject_id, classId: item.class_id })}

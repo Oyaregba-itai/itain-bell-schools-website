@@ -683,9 +683,10 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
 
       // If teacher, assign to selected classes
       if (newUser.role === "teacher" && selectedClasses.length > 0 && newUserId) {
-        await supabase.from("teacher_classes").insert(
+        const { error: assignError } = await supabase.from("teacher_classes").insert(
           selectedClasses.map((classId) => ({ teacher_id: newUserId, class_id: classId }))
         );
+        if (assignError) throw assignError;
       }
       return result;
     },
@@ -1714,7 +1715,8 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
       const { error: uploadError } = await supabase.storage.from("profile-pictures").upload(path, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from("profile-pictures").getPublicUrl(path);
-      await supabase.from("students").update({ avatar_url: urlData.publicUrl }).eq("id", studentId);
+      const { error: updateError } = await supabase.from("students").update({ avatar_url: urlData.publicUrl }).eq("id", studentId);
+      if (updateError) throw updateError;
       queryClient.invalidateQueries({ queryKey: ["student-profile", studentId] });
       queryClient.invalidateQueries({ queryKey: ["all-students"] });
       toast({ title: "Photo updated" });
