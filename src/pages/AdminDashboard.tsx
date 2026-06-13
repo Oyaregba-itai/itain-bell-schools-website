@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle, Send, CheckCircle, Banknote, Receipt, TrendingDown, CreditCard, Calendar, Megaphone, Clock, UserPlus } from "lucide-react";
+import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle, Send, CheckCircle, Banknote, Receipt, TrendingDown, CreditCard, Calendar, Megaphone, Clock, UserPlus, KeyRound } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import MessagingView from "@/components/MessagingView";
@@ -737,6 +737,39 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
+  const [resetPasswordFor, setResetPasswordFor] = useState<any | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [pwCopied, setPwCopied] = useState(false);
+
+  const resetPassword = useMutation({
+    mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-user-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ user_id: userId, password }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || "Failed to reset password");
+    },
+    onSuccess: () => toast({ title: "Password reset successfully" }),
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const openResetPassword = (user: any) => {
+    const firstName = user.full_name?.trim().split(/\s+/).find((w: string) => !/^(mrs|mr|miss|ms|dr|coach)\.?$/i.test(w)) || "User";
+    const capitalized = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+    setNewPassword(`${capitalized}@IBS25`);
+    setPwCopied(false);
+    setResetPasswordFor(user);
+  };
+
+  const copyNewPassword = () => {
+    navigator.clipboard.writeText(newPassword);
+    setPwCopied(true);
+    setTimeout(() => setPwCopied(false), 2000);
+  };
+
   const toggleClass = (id: string) =>
     setSelectedClasses((prev) => prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]);
 
@@ -895,6 +928,37 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!resetPasswordFor} onOpenChange={open => !open && setResetPasswordFor(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Reset Password</DialogTitle></DialogHeader>
+          {resetPasswordFor && <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Set a new password for <strong className="text-foreground">{resetPasswordFor.full_name}</strong> ({resetPasswordFor.email}).
+              They'll need to use this new password to sign in.
+            </p>
+            <div>
+              <Label>New Password</Label>
+              <div className="flex gap-2 mt-1">
+                <Input value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                <Button type="button" variant="outline" size="icon" onClick={copyNewPassword}>
+                  {pwCopied ? <Check size={16} /> : <Copy size={16} />}
+                </Button>
+              </div>
+            </div>
+            <Button
+              className="w-full hero-gradient"
+              disabled={resetPassword.isPending || !newPassword}
+              onClick={() => resetPassword.mutate(
+                { userId: resetPasswordFor.user_id, password: newPassword },
+                { onSuccess: () => setResetPasswordFor(null) }
+              )}
+            >
+              {resetPassword.isPending ? "Resetting..." : "Reset Password"}
+            </Button>
+          </div>}
+        </DialogContent>
+      </Dialog>
+
       <div className="bg-card rounded-xl shadow-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted">
@@ -903,6 +967,7 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
               <th className="text-left p-3 font-medium text-muted-foreground">Email</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Role</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Joined</th>
+              <th className="p-3" />
               <th className="p-3" />
               <th className="p-3" />
               <th className="p-3" />
@@ -935,6 +1000,9 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
                 </td>
                 <td className="p-3">
                   <button onClick={() => setEditing({ ...user })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button>
+                </td>
+                <td className="p-3">
+                  <button onClick={() => openResetPassword(user)} title="Reset Password" className="text-muted-foreground hover:text-primary transition-colors"><KeyRound size={14} /></button>
                 </td>
                 <td className="p-3">
                   {isSuperAdmin && user.user_id !== currentUser?.id && (
