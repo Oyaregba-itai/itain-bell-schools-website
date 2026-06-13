@@ -1166,6 +1166,7 @@ export const UploadResults = () => {
     if (!user || !classData || !selectedSubject) return;
     setSaving(true);
     let saved = 0, errors = 0;
+    let lastError: string | undefined;
     for (const student of classData.students) {
       const entry = scores[student.id];
       if (!entry?.score) continue;
@@ -1173,15 +1174,16 @@ export const UploadResults = () => {
       if (isNaN(scoreVal)) continue;
       const grade = getGradeForScore(scoreVal, outOf);
       const existing = classData.existingMap[student.id];
+      let error;
       try {
         if (existing) {
-          await supabase.from("results").update({
+          ({ error } = await supabase.from("results").update({
             total_score: scoreVal,
             grade_letter: grade.letter,
             teacher_comments: entry.comment || null,
-          }).eq("id", existing.id);
+          }).eq("id", existing.id));
         } else {
-          await supabase.from("results").insert({
+          ({ error } = await supabase.from("results").insert({
             student_id: student.id,
             subject_id: selectedSubject.id,
             term_id: selTerm,
@@ -1190,10 +1192,17 @@ export const UploadResults = () => {
             grade_letter: grade.letter,
             teacher_comments: entry.comment || null,
             uploaded_by: user.id,
-          });
+          }));
         }
+      } catch (e: any) {
+        error = e;
+      }
+      if (error) {
+        errors++;
+        lastError = error.message || String(error);
+      } else {
         saved++;
-      } catch { errors++; }
+      }
     }
     setSaving(false);
     if (saved > 0) {
@@ -1202,7 +1211,13 @@ export const UploadResults = () => {
       queryClient.invalidateQueries({ queryKey: ["my-results"] });
       queryClient.invalidateQueries({ queryKey: ["teacher-overview"] });
     }
-    if (errors > 0) toast({ title: "Some results failed to save", variant: "destructive" } as any);
+    if (errors > 0) {
+      toast({
+        title: `${errors} result${errors !== 1 ? "s" : ""} failed to save`,
+        description: lastError,
+        variant: "destructive",
+      } as any);
+    }
   };
 
   const filledCount = Object.values(scores).filter(s => s.score).length;
