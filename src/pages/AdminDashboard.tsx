@@ -13,13 +13,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle, Send, CheckCircle, Banknote, Receipt, TrendingDown, CreditCard, Calendar, Megaphone, Clock, UserPlus, KeyRound } from "lucide-react";
+import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle, Send, CheckCircle, Banknote, Receipt, TrendingDown, CreditCard, Calendar, Megaphone, Clock, UserPlus, KeyRound, History } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import MessagingView from "@/components/MessagingView";
 import ReportCard from "@/components/ReportCard";
 import { MySubjectsView, UploadResults, MyResults } from "@/pages/TeacherDashboard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
+import { logActivity } from "@/lib/activityLog";
 
 const AdminDashboard = () => {
   const { user, isSuperAdmin } = useAuth();
@@ -51,13 +52,16 @@ const AdminDashboard = () => {
   });
 
   const teachesSubjects = (ownSubjects?.length ?? 0) > 0;
-  const extraTabs = teachesSubjects
-    ? [
-        { id: "my-subjects", label: "My Subjects", icon: BookOpen },
-        { id: "upload", label: "Upload Results", icon: Upload },
-        { id: "my-results", label: "My Results", icon: BarChart3 },
-      ]
-    : [];
+  const extraTabs = [
+    ...(teachesSubjects
+      ? [
+          { id: "my-subjects", label: "My Subjects", icon: BookOpen },
+          { id: "upload", label: "Upload Results", icon: Upload },
+          { id: "my-results", label: "My Results", icon: BarChart3 },
+        ]
+      : []),
+    ...(isSuperAdmin ? [{ id: "activity", label: "User Activity", icon: History }] : []),
+  ];
 
   return (
     <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} extraTabs={extraTabs} tabBadges={{ requests: pendingResultsCount || 0 }}>
@@ -78,6 +82,7 @@ const AdminDashboard = () => {
       {activeTab === "messaging" && <MessagingView />}
       {activeTab === "my-subjects" && teachesSubjects && <MySubjectsView />}
       {activeTab === "upload" && teachesSubjects && <UploadResults />}
+      {activeTab === "activity" && isSuperAdmin && <UserActivityPanel />}
       {activeTab === "my-results" && teachesSubjects && <MyResults />}
     </DashboardLayout>
   );
@@ -692,6 +697,7 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
     },
     onSuccess: () => {
       toast({ title: "Staff account created successfully" });
+      logActivity("Created user", `${newUser.full_name} (${newUser.email}) as ${newUser.role}`);
       queryClient.invalidateQueries({ queryKey: ["all-users"] });
       setDialogOpen(false);
       resetDialog();
@@ -714,6 +720,7 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
     },
     onSuccess: () => {
       toast({ title: "User updated" });
+      logActivity("Updated user", `${editing.full_name} (${editing.email || editing.user_id}) — role: ${editing.role}`);
       queryClient.invalidateQueries({ queryKey: ["all-users"] });
       setEditing(null);
     },
@@ -721,18 +728,20 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
   });
 
   const deleteUser = useMutation({
-    mutationFn: async (userId: string) => {
+    mutationFn: async (user: { user_id: string; full_name: string; email?: string }) => {
       const { data: { session } } = await supabase.auth.getSession();
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ user_id: userId }),
+        body: JSON.stringify({ user_id: user.user_id }),
       });
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || "Failed to delete user");
+      return user;
     },
-    onSuccess: () => {
+    onSuccess: (user) => {
       toast({ title: "User deleted successfully" });
+      logActivity("Deleted user", `${user.full_name} (${user.email || user.user_id})`);
       queryClient.invalidateQueries({ queryKey: ["all-users"] });
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
@@ -753,7 +762,10 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || "Failed to reset password");
     },
-    onSuccess: () => toast({ title: "Password reset successfully" }),
+    onSuccess: (_data, vars) => {
+      toast({ title: "Password reset successfully" });
+      logActivity("Reset password", resetPasswordFor ? `${resetPasswordFor.full_name} (${resetPasswordFor.email || vars.userId})` : vars.userId);
+    },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
@@ -993,7 +1005,7 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
                 </td>
                 <td className="p-3 text-muted-foreground">{new Date(user.created_at).toLocaleDateString()}</td>
                 <td className="p-3">
-                  {user.role === "teacher" && (
+                  {(user.role === "teacher" || user.role === "admin") && (
                     <button onClick={() => onView(user)} className="text-xs text-primary hover:underline font-medium flex items-center gap-1">
                       Profile <ChevronRight size={13} />
                     </button>
@@ -1010,7 +1022,7 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
                     <button
                       onClick={() => {
                         if (confirm(`Delete ${user.full_name}? This cannot be undone.`))
-                          deleteUser.mutate(user.user_id);
+                          deleteUser.mutate(user);
                       }}
                       disabled={deleteUser.isPending}
                       className="text-destructive hover:opacity-70 transition-opacity"
@@ -3005,6 +3017,11 @@ const ScoreUploadRequestsPanel = () => {
     },
     onSuccess: (_data, vars) => {
       toast({ title: vars.status === "approved" ? "Request approved" : "Request denied" });
+      const req = requests?.find((r: any) => r.id === vars.id);
+      logActivity(
+        vars.status === "approved" ? "Approved score upload request" : "Denied score upload request",
+        req ? `${req.headName} — ${req.className} / ${req.subjectName}` : undefined
+      );
       queryClient.invalidateQueries({ queryKey: ["score-upload-requests-admin"] });
       queryClient.invalidateQueries({ queryKey: ["pending-upload-requests-count"] });
       queryClient.invalidateQueries({ queryKey: ["admin-pending-results-count"] });
@@ -3116,8 +3133,9 @@ const SubmittedReportCards = () => {
         }
       } catch { /* silent fail */ }
     },
-    onSuccess: () => {
+    onSuccess: (_data, sub) => {
       toast({ title: "Report card approved — parents notified" });
+      logActivity("Approved report card", `${sub.studentName} — ${sub.termName}`);
       queryClient.invalidateQueries({ queryKey: ["submitted-report-cards"] });
       queryClient.invalidateQueries({ queryKey: ["pending-submissions-count"] });
       queryClient.invalidateQueries({ queryKey: ["admin-pending-results-count"] });
@@ -3891,6 +3909,63 @@ export const FinancesView = () => {
               <Receipt size={16} /> {recordPayment.isPending ? "Recording..." : "Record Payment"}
             </Button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const UserActivityPanel = () => {
+  const { data: logs, isLoading } = useQuery({
+    queryKey: ["activity-log"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("activity_log")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-lg font-heading text-foreground">User Activity</h3>
+        <p className="text-sm text-muted-foreground">A log of logins and key actions taken by staff across the portal.</p>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading activity…</p>
+      ) : !logs?.length ? (
+        <div className="bg-card rounded-xl p-8 shadow-card text-center text-sm text-muted-foreground">
+          No activity recorded yet.
+        </div>
+      ) : (
+        <div className="bg-card rounded-xl shadow-card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted">
+              <tr>
+                <th className="text-left p-3 font-medium text-muted-foreground">User</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Action</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Details</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((log: any) => (
+                <tr key={log.id} className="border-t border-border">
+                  <td className="p-3 font-medium text-foreground whitespace-nowrap">{log.actor_name}</td>
+                  <td className="p-3 text-muted-foreground whitespace-nowrap">{log.action}</td>
+                  <td className="p-3 text-muted-foreground">{log.details || "—"}</td>
+                  <td className="p-3 text-muted-foreground whitespace-nowrap">
+                    {new Date(log.created_at).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

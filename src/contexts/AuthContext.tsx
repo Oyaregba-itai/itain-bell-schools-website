@@ -127,12 +127,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) return { error };
+
+      if (data.user) {
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("user_id", data.user.id)
+          .single();
+        await supabase.from("activity_log").insert({
+          actor_id: data.user.id,
+          actor_name: profileData?.full_name || data.user.email || "Unknown",
+          action: "Logged in",
+        });
+      }
 
       return { error: null };
     } catch (error) {
