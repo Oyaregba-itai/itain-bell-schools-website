@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { notifyUsers, getAdminUserIds } from "@/lib/notifications";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -456,6 +457,18 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
         submitted_at: new Date().toISOString(),
       }, { onConflict: "student_id,term_id,result_type" });
       if (error) throw error;
+
+      try {
+        const adminIds = await getAdminUserIds();
+        const termName = terms?.find((t: any) => t.id === selTerm)?.name || "";
+        await notifyUsers(
+          adminIds,
+          "report",
+          "New report card submitted for review",
+          `${reviewing?.student?.full_name || ""} — ${termName}`,
+          "requests"
+        );
+      } catch { /* silent fail */ }
     },
     onSuccess: () => {
       toast({ title: "Report card submitted to admin" });
@@ -1118,13 +1131,25 @@ export const UploadResults = () => {
   });
 
   const requestAccess = useMutation({
-    mutationFn: async ({ subjectId, classId }: { subjectId: string; classId: string }) => {
+    mutationFn: async ({ subjectId, classId, subjectName, className }: { subjectId: string; classId: string; subjectName?: string; className?: string }) => {
       const { error } = await supabase.from("score_upload_requests").insert({
         head_teacher_id: user!.id,
         subject_id: subjectId,
         class_id: classId,
       });
       if (error) throw error;
+
+      try {
+        const { data: requesterProfile } = await supabase.from("profiles").select("full_name").eq("user_id", user!.id).single();
+        const adminIds = await getAdminUserIds();
+        await notifyUsers(
+          adminIds,
+          "request",
+          "New score upload request",
+          `${requesterProfile?.full_name || "A head teacher"} requested access for ${className || ""} / ${subjectName || ""}`,
+          "requests"
+        );
+      } catch { /* silent fail */ }
     },
     onSuccess: () => {
       toast({ title: "Request sent to admin" });
@@ -1296,14 +1321,14 @@ export const UploadResults = () => {
                   <div className="flex items-center gap-2">
                     <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Denied</span>
                     <Button size="sm" variant="outline" className="h-7 text-xs"
-                      onClick={() => requestAccess.mutate({ subjectId: item.subject_id, classId: item.class_id })}
+                      onClick={() => requestAccess.mutate({ subjectId: item.subject_id, classId: item.class_id, subjectName: item.name, className: item.className })}
                       disabled={requestAccess.isPending}>
                       Request Again
                     </Button>
                   </div>
                 ) : (
                   <Button size="sm" variant="outline" className="h-7 text-xs"
-                    onClick={() => requestAccess.mutate({ subjectId: item.subject_id, classId: item.class_id })}
+                    onClick={() => requestAccess.mutate({ subjectId: item.subject_id, classId: item.class_id, subjectName: item.name, className: item.className })}
                     disabled={requestAccess.isPending}>
                     Request Access
                   </Button>

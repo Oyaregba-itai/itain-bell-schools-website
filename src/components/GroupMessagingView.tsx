@@ -12,6 +12,7 @@ import { Plus, Users, Send, X } from "lucide-react";
 import { format } from "date-fns";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import { notifyUsers } from "@/lib/notifications";
 
 const GroupMessagingView = () => {
   const { user, role } = useAuth();
@@ -157,6 +158,18 @@ const GroupMessagingView = () => {
       });
 
       if (error) throw error;
+
+      try {
+        const { data: senderProfile } = await supabase.from("profiles").select("full_name").eq("user_id", user!.id).single();
+        const memberIds = (groupMembers || []).map((m: any) => m.user_id).filter((id: string) => id !== user!.id);
+        await notifyUsers(
+          memberIds,
+          "message",
+          `New message in ${selectedGroup.name} from ${senderProfile?.full_name || "a staff member"}`,
+          messageText.length > 200 ? messageText.substring(0, 200) + "…" : messageText,
+          "messaging"
+        );
+      } catch { /* silent fail */ }
     },
     onSuccess: () => {
       setMessageText("");

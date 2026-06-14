@@ -10,6 +10,7 @@ import { Send, MessageCircle, Check, Users } from "lucide-react";
 import { format } from "date-fns";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import GroupMessagingView from "@/components/GroupMessagingView";
+import { notifyUsers } from "@/lib/notifications";
 
 const MessagingView = () => {
   const [mode, setMode] = useState<"direct" | "groups">("direct");
@@ -109,6 +110,17 @@ const DirectMessages = () => {
             }),
           });
         }
+      } catch { /* silent fail */ }
+
+      try {
+        const { data: senderProfile } = await supabase.from("profiles").select("full_name").eq("user_id", user!.id).single();
+        await notifyUsers(
+          [selectedUser.user_id],
+          "message",
+          `New message from ${senderProfile?.full_name || "a staff member"}`,
+          messageText.length > 200 ? messageText.substring(0, 200) + "…" : messageText,
+          "messaging"
+        );
       } catch { /* silent fail */ }
     },
     onSuccess: () => {

@@ -21,6 +21,7 @@ import ReportCard from "@/components/ReportCard";
 import { MySubjectsView, UploadResults, MyResults } from "@/pages/TeacherDashboard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
 import { logActivity } from "@/lib/activityLog";
+import { notifyUsers } from "@/lib/notifications";
 
 const AdminDashboard = () => {
   const { user, isSuperAdmin } = useAuth();
@@ -2755,6 +2756,17 @@ const ManageEvents = () => {
       const { data: userData } = await supabase.auth.getUser();
       const { error } = await supabase.from("events").insert([{ ...newEvent, flyer_url, created_by: userData.user?.id }]);
       if (error) throw error;
+
+      try {
+        const { data: allProfiles } = await supabase.from("profiles").select("user_id").neq("user_id", userData.user?.id);
+        await notifyUsers(
+          (allProfiles || []).map((p: any) => p.user_id),
+          "event",
+          `New event: ${newEvent.title}`,
+          newEvent.description || undefined,
+          "events"
+        );
+      } catch { /* silent fail */ }
     },
     onSuccess: () => {
       toast({ title: "Event created successfully" });
@@ -3022,6 +3034,15 @@ const ScoreUploadRequestsPanel = () => {
         vars.status === "approved" ? "Approved score upload request" : "Denied score upload request",
         req ? `${req.headName} — ${req.className} / ${req.subjectName}` : undefined
       );
+      if (req) {
+        notifyUsers(
+          [req.head_teacher_id],
+          "request",
+          vars.status === "approved" ? "Score upload request approved" : "Score upload request denied",
+          `${req.className} / ${req.subjectName}`,
+          "my-subjects"
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["score-upload-requests-admin"] });
       queryClient.invalidateQueries({ queryKey: ["pending-upload-requests-count"] });
       queryClient.invalidateQueries({ queryKey: ["admin-pending-results-count"] });
@@ -3129,8 +3150,25 @@ const SubmittedReportCards = () => {
                 recipients,
               }),
             });
+            await notifyUsers(
+              recipients,
+              "report",
+              `${sub.studentName}'s Report Card is Ready`,
+              `The ${sub.termName} ${sub.result_type === "mid_term" ? "Mid Term" : "End of Term"} report card is now available.`,
+              "results"
+            );
           }
         }
+      } catch { /* silent fail */ }
+
+      try {
+        await notifyUsers(
+          [sub.head_teacher_id],
+          "report",
+          "Report card approved",
+          `${sub.studentName} — ${sub.termName}`,
+          "my-results"
+        );
       } catch { /* silent fail */ }
     },
     onSuccess: (_data, sub) => {

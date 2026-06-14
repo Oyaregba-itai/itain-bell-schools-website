@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Megaphone } from "lucide-react";
 import { format } from "date-fns";
+import { notifyUsers } from "@/lib/notifications";
 
 const AnnouncementsView = () => {
   const { role, user } = useAuth();
@@ -51,6 +52,18 @@ const AnnouncementsView = () => {
     } catch { /* silent fail - notification is non-critical */ }
   };
 
+  const createInAppNotifications = async (title: string, content: string, targetRole: string) => {
+    try {
+      let query = supabase.from("user_roles").select("user_id");
+      if (targetRole !== "all") query = query.eq("role", targetRole);
+      const { data: roleData } = await query;
+      const recipients = (roleData || [])
+        .map((r: any) => r.user_id as string)
+        .filter((id) => id !== user!.id);
+      await notifyUsers(recipients, "announcement", title, content, "announcements");
+    } catch { /* silent fail */ }
+  };
+
   const create = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.from("announcements").insert({
@@ -63,6 +76,7 @@ const AnnouncementsView = () => {
       if (error) throw error;
       // Send email notifications in background
       sendEmailNotifications(form.title, form.content, form.target_role);
+      createInAppNotifications(form.title, form.content, form.target_role);
     },
     onSuccess: () => {
       toast({ title: "Announcement posted" });
