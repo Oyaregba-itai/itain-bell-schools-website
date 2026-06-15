@@ -643,11 +643,22 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
                 <BookOpen size={15} /> Preview Report Card
               </Button>
 
-              {reviewing?.submission?.status !== "approved" && (
-                <Button className="w-full hero-gradient gap-2" onClick={() => submitReport.mutate({ studentId: reviewing.student.id, comment: headComment })} disabled={submitReport.isPending}>
-                  <Send size={15} /> {submitReport.isPending ? "Submitting..." : "Submit Report Card to Admin"}
-                </Button>
-              )}
+              {reviewing?.submission?.status !== "approved" && (() => {
+                const complete = reviewing.uploaded >= reviewing.total && reviewing.total > 0;
+                return (
+                  <>
+                    {!complete && (
+                      <p className="text-center text-sm text-amber-600 bg-amber-50 rounded-lg p-2">
+                        All subject scores must be uploaded before this report card can be submitted.
+                        ({reviewing.uploaded}/{reviewing.total} subjects uploaded)
+                      </p>
+                    )}
+                    <Button className="w-full hero-gradient gap-2" onClick={() => submitReport.mutate({ studentId: reviewing.student.id, comment: headComment })} disabled={submitReport.isPending || !complete}>
+                      <Send size={15} /> {submitReport.isPending ? "Submitting..." : "Submit Report Card to Admin"}
+                    </Button>
+                  </>
+                );
+              })()}
               {reviewing?.submission?.status === "approved" && (
                 <p className="text-center text-sm text-green-600 font-medium">✓ This report card has been approved by admin</p>
               )}
