@@ -34,7 +34,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
         supabase.from("students").select("*").eq("id", studentId).single(),
         supabase.from("terms").select("*").eq("id", termId).single(),
         supabase.from("results").select("*").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType),
-        supabase.from("report_submissions").select("head_teacher_comment").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType).maybeSingle(),
+        supabase.from("report_submissions").select("head_teacher_comment, head_of_school_comment").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType).maybeSingle(),
       ]);
       if (studentRes.error) throw studentRes.error;
 
@@ -82,6 +82,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
         results: results.map((r: any) => ({ ...r, subjectName: subjectMap[r.subject_id] || "—" })),
         subjectStats,
         headTeacherComment: submissionRes.data?.head_teacher_comment || "",
+        headOfSchoolComment: submissionRes.data?.head_of_school_comment || "",
         headTeacherName,
       };
     },
@@ -89,7 +90,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
 
   const handlePrint = () => {
     if (!data) return;
-    const { student, term, results, subjectStats, headTeacherComment, headTeacherName } = data;
+    const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName } = data;
     const totalObtainable = results.length * 30;
     const totalObtained = results.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
     const average = results.length > 0 ? totalObtained / results.length : 0;
@@ -208,13 +209,18 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
       <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${teacherComment}</td>
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date:</td>
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Signature:</td></tr></table>
-    <table style="width:100%;border:2px solid #333;border-top:0"><tr>
+    <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
       <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Head Teacher Comments</td></tr><tr>
       <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headTeacherComment}</td>
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date:</td>
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Signature:</td></tr><tr>
-      <td style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Head Teacher:</strong> ${headTeacherName || "—"}</td>
-      <td colspan="2" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Acting Head of School:</strong> Mrs Goodness Duru</td></tr></table>
+      <td colspan="3" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Head Teacher:</strong> ${headTeacherName || "—"}</td></tr></table>
+    <table style="width:100%;border:2px solid #333;border-top:0"><tr>
+      <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Head of School Comments</td></tr><tr>
+      <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headOfSchoolComment}</td>
+      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date:</td>
+      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Signature:</td></tr><tr>
+      <td colspan="3" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Acting Head of School:</strong> Mrs Goodness Duru</td></tr></table>
     </body></html>`;
 
     const win = window.open("", "_blank", "width=900,height=1100");
@@ -233,7 +239,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
 
   if (!data) return null;
 
-  const { student, term, results, subjectStats, headTeacherComment, headTeacherName } = data;
+  const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName } = data;
   const totalObtainable = results.length * 30;
   const totalObtained = results.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
   const average = results.length > 0 ? totalObtained / results.length : 0;
@@ -416,9 +422,21 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
               <div className="px-2 py-2">Date: ___________</div>
               <div className="px-2 py-2">Signature: ___________</div>
             </div>
-            <div className="grid grid-cols-2 divide-x divide-gray-400 border-t border-gray-400">
-              <div className="px-2 py-1.5"><span className="font-semibold">Head Teacher:</span> {headTeacherName || "—"}</div>
-              <div className="px-2 py-1.5"><span className="font-semibold">Acting Head of School:</span> Mrs Goodness Duru</div>
+            <div className="px-2 py-1.5 border-t border-gray-400">
+              <span className="font-semibold">Head Teacher:</span> {headTeacherName || "—"}
+            </div>
+          </div>
+
+          {/* Head of School comment */}
+          <div className="border-2 border-gray-800 border-t-0">
+            <div className="bg-gray-100 px-2 py-1 font-bold border-b border-gray-400">Head of School Comments</div>
+            <div className="grid grid-cols-3 divide-x divide-gray-400">
+              <div className="col-span-1 px-2 py-2 min-h-[32px]">{headOfSchoolComment || <span className="text-gray-400 italic">Pending</span>}</div>
+              <div className="px-2 py-2">Date: ___________</div>
+              <div className="px-2 py-2">Signature: ___________</div>
+            </div>
+            <div className="px-2 py-1.5 border-t border-gray-400">
+              <span className="font-semibold">Acting Head of School:</span> Mrs Goodness Duru
             </div>
           </div>
 

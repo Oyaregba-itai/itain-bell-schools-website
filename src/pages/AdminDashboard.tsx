@@ -3284,7 +3284,7 @@ const LiveReportCardPreview = ({
     queryFn: async () => {
       const { data } = await supabase
         .from("report_submissions")
-        .select("head_teacher_comment")
+        .select("head_teacher_comment, head_of_school_comment")
         .eq("student_id", selStudent)
         .eq("term_id", selTerm)
         .eq("result_type", selType)
@@ -3295,6 +3295,9 @@ const LiveReportCardPreview = ({
 
   const [headComment, setHeadComment] = useState("");
   useEffect(() => { setHeadComment(submission?.head_teacher_comment || ""); }, [submission, selStudent, selTerm, selType]);
+
+  const [schoolHeadComment, setSchoolHeadComment] = useState("");
+  useEffect(() => { setSchoolHeadComment(submission?.head_of_school_comment || ""); }, [submission, selStudent, selTerm, selType]);
 
   const saveHeadComment = useMutation({
     mutationFn: async () => {
@@ -3308,6 +3311,24 @@ const LiveReportCardPreview = ({
     },
     onSuccess: () => {
       toast({ title: "Head teacher comment saved — report card refreshed" });
+      queryClient.invalidateQueries({ queryKey: ["report-submission-admin", selStudent, selTerm, selType] });
+      queryClient.invalidateQueries({ queryKey: ["report-card", selStudent, selTerm, selType] });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const saveSchoolHeadComment = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("report_submissions").upsert({
+        student_id: selStudent,
+        term_id: selTerm,
+        result_type: selType,
+        head_of_school_comment: schoolHeadComment,
+      }, { onConflict: "student_id,term_id,result_type" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Head of School comment saved — report card refreshed" });
       queryClient.invalidateQueries({ queryKey: ["report-submission-admin", selStudent, selTerm, selType] });
       queryClient.invalidateQueries({ queryKey: ["report-card", selStudent, selTerm, selType] });
     },
@@ -3408,6 +3429,20 @@ const LiveReportCardPreview = ({
               />
               <Button size="sm" className="hero-gradient" onClick={() => saveHeadComment.mutate()} disabled={saveHeadComment.isPending}>
                 {saveHeadComment.isPending ? "Saving..." : "Save Comment"}
+              </Button>
+            </div>
+
+            <div className="border-t border-border pt-3 space-y-2">
+              <h4 className="font-heading font-semibold text-foreground text-sm">Head of School Comment</h4>
+              <Textarea
+                value={schoolHeadComment}
+                onChange={e => setSchoolHeadComment(e.target.value)}
+                placeholder="Write the Head of School's comment on this student's overall performance..."
+                rows={3}
+                className="text-sm"
+              />
+              <Button size="sm" className="hero-gradient" onClick={() => saveSchoolHeadComment.mutate()} disabled={saveSchoolHeadComment.isPending}>
+                {saveSchoolHeadComment.isPending ? "Saving..." : "Save Comment"}
               </Button>
             </div>
           </div>
