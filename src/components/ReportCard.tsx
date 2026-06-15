@@ -38,11 +38,16 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
       ]);
       if (studentRes.error) throw studentRes.error;
 
-      // Get class name (flat query — no FK joins)
+      // Get class name and head teacher (flat queries — no FK joins)
       let className = "—";
+      let headTeacherName = "";
       if (studentRes.data?.class_id) {
-        const { data: cls } = await supabase.from("classes").select("name").eq("id", studentRes.data.class_id).single();
+        const { data: cls } = await supabase.from("classes").select("name, head_teacher_id").eq("id", studentRes.data.class_id).single();
         className = cls?.name || "—";
+        if (cls?.head_teacher_id) {
+          const { data: headProfile } = await supabase.from("profiles").select("full_name").eq("user_id", cls.head_teacher_id).maybeSingle();
+          headTeacherName = headProfile?.full_name || "";
+        }
       }
 
       // Get subject names
@@ -77,13 +82,14 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
         results: results.map((r: any) => ({ ...r, subjectName: subjectMap[r.subject_id] || "—" })),
         subjectStats,
         headTeacherComment: submissionRes.data?.head_teacher_comment || "",
+        headTeacherName,
       };
     },
   });
 
   const handlePrint = () => {
     if (!data) return;
-    const { student, term, results, subjectStats, headTeacherComment } = data;
+    const { student, term, results, subjectStats, headTeacherComment, headTeacherName } = data;
     const totalObtainable = results.length * 30;
     const totalObtained = results.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
     const average = results.length > 0 ? totalObtained / results.length : 0;
@@ -206,7 +212,9 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
       <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Head Teacher Comments</td></tr><tr>
       <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headTeacherComment}</td>
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date:</td>
-      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Signature:</td></tr></table>
+      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Signature:</td></tr><tr>
+      <td style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Head Teacher:</strong> ${headTeacherName || "—"}</td>
+      <td colspan="2" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Head of School:</strong> Mrs Itai Joy Onize</td></tr></table>
     </body></html>`;
 
     const win = window.open("", "_blank", "width=900,height=1100");
@@ -225,7 +233,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
 
   if (!data) return null;
 
-  const { student, term, results, subjectStats, headTeacherComment } = data;
+  const { student, term, results, subjectStats, headTeacherComment, headTeacherName } = data;
   const totalObtainable = results.length * 30;
   const totalObtained = results.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
   const average = results.length > 0 ? totalObtained / results.length : 0;
@@ -407,6 +415,10 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
               <div className="col-span-1 px-2 py-2 min-h-[32px]">{headTeacherComment || <span className="text-gray-400 italic">Pending</span>}</div>
               <div className="px-2 py-2">Date: ___________</div>
               <div className="px-2 py-2">Signature: ___________</div>
+            </div>
+            <div className="grid grid-cols-2 divide-x divide-gray-400 border-t border-gray-400">
+              <div className="px-2 py-1.5"><span className="font-semibold">Head Teacher:</span> {headTeacherName || "—"}</div>
+              <div className="px-2 py-1.5"><span className="font-semibold">Head of School:</span> Mrs Itai Joy Onize</div>
             </div>
           </div>
 
