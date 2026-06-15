@@ -214,7 +214,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date:</td>
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Signature:</td></tr><tr>
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Head Teacher:</strong> ${headTeacherName || "—"}</td>
-      <td colspan="2" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Head of School:</strong> Mrs Itai Joy Onize</td></tr></table>
+      <td colspan="2" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Acting Head of School:</strong> Mrs Goodness Duru</td></tr></table>
     </body></html>`;
 
     const win = window.open("", "_blank", "width=900,height=1100");
@@ -418,7 +418,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
             </div>
             <div className="grid grid-cols-2 divide-x divide-gray-400 border-t border-gray-400">
               <div className="px-2 py-1.5"><span className="font-semibold">Head Teacher:</span> {headTeacherName || "—"}</div>
-              <div className="px-2 py-1.5"><span className="font-semibold">Head of School:</span> Mrs Itai Joy Onize</div>
+              <div className="px-2 py-1.5"><span className="font-semibold">Acting Head of School:</span> Mrs Goodness Duru</div>
             </div>
           </div>
 
