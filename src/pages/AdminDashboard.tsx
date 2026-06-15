@@ -3278,6 +3278,42 @@ const LiveReportCardPreview = ({
   const [editRows, setEditRows] = useState<any[]>([]);
   useEffect(() => { setEditRows(filteredResults.map(r => ({ ...r }))); }, [selStudent, selTerm, selType, allResults.length]);
 
+  const { data: submission } = useQuery({
+    queryKey: ["report-submission-admin", selStudent, selTerm, selType],
+    enabled: previewReady,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("report_submissions")
+        .select("head_teacher_comment")
+        .eq("student_id", selStudent)
+        .eq("term_id", selTerm)
+        .eq("result_type", selType)
+        .maybeSingle();
+      return data;
+    },
+  });
+
+  const [headComment, setHeadComment] = useState("");
+  useEffect(() => { setHeadComment(submission?.head_teacher_comment || ""); }, [submission, selStudent, selTerm, selType]);
+
+  const saveHeadComment = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("report_submissions").upsert({
+        student_id: selStudent,
+        term_id: selTerm,
+        result_type: selType,
+        head_teacher_comment: headComment,
+      }, { onConflict: "student_id,term_id,result_type" });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Head teacher comment saved — report card refreshed" });
+      queryClient.invalidateQueries({ queryKey: ["report-submission-admin", selStudent, selTerm, selType] });
+      queryClient.invalidateQueries({ queryKey: ["report-card", selStudent, selTerm, selType] });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -3359,6 +3395,20 @@ const LiveReportCardPreview = ({
                   />
                 </div>
               ))}
+            </div>
+
+            <div className="border-t border-border pt-3 space-y-2">
+              <h4 className="font-heading font-semibold text-foreground text-sm">Head Teacher Comment</h4>
+              <Textarea
+                value={headComment}
+                onChange={e => setHeadComment(e.target.value)}
+                placeholder="Write the head teacher's comment on this student's overall performance..."
+                rows={3}
+                className="text-sm"
+              />
+              <Button size="sm" className="hero-gradient" onClick={() => saveHeadComment.mutate()} disabled={saveHeadComment.isPending}>
+                {saveHeadComment.isPending ? "Saving..." : "Save Comment"}
+              </Button>
             </div>
           </div>
         </div>
