@@ -12,8 +12,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle, CheckCircle, Banknote, Receipt, TrendingDown, CreditCard, Calendar, Megaphone, Clock, UserPlus, KeyRound, History } from "lucide-react";
+import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, ChevronsUpDown, Copy, Upload, Pencil, TrendingUp, AlertCircle, CheckCircle, Banknote, Receipt, TrendingDown, CreditCard, Calendar, Megaphone, Clock, UserPlus, KeyRound, History, Search } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import MessagingView from "@/components/MessagingView";
@@ -3268,6 +3270,55 @@ const SubmittedReportCards = () => {
   );
 };
 
+const SearchableCombobox = ({
+  options, value, onChange, placeholder, searchPlaceholder,
+}: {
+  options: { id: string; name: string }[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  searchPlaceholder: string;
+}) => {
+  const [open, setOpen] = useState(false);
+  const selected = options.find(o => o.id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal"
+        >
+          <span className="truncate">{selected ? selected.name : placeholder}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+        <Command>
+          <CommandInput placeholder={searchPlaceholder} />
+          <CommandList>
+            <CommandEmpty>No match found.</CommandEmpty>
+            <CommandGroup>
+              {options.map(o => (
+                <CommandItem
+                  key={o.id}
+                  value={o.name}
+                  onSelect={() => { onChange(o.id); setOpen(false); }}
+                >
+                  <Check className={`mr-2 h-4 w-4 ${value === o.id ? "opacity-100" : "opacity-0"}`} />
+                  {o.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 const LiveReportCardPreview = ({
   studentsWithResults, termsWithResults, allResults, onEditResult, onResultSaved,
 }: {
@@ -3358,21 +3409,23 @@ const LiveReportCardPreview = ({
       <div className="bg-card rounded-xl p-4 shadow-card flex flex-wrap gap-3 items-end">
         <div className="flex-1 min-w-[180px]">
           <Label className="text-xs mb-1 block">Student</Label>
-          <Select value={selStudent} onValueChange={setSelStudent}>
-            <SelectTrigger><SelectValue placeholder="Select student..." /></SelectTrigger>
-            <SelectContent>
-              {studentsWithResults.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <SearchableCombobox
+            options={studentsWithResults}
+            value={selStudent}
+            onChange={setSelStudent}
+            placeholder="Select student..."
+            searchPlaceholder="Search students..."
+          />
         </div>
         <div className="flex-1 min-w-[160px]">
           <Label className="text-xs mb-1 block">Term</Label>
-          <Select value={selTerm} onValueChange={setSelTerm}>
-            <SelectTrigger><SelectValue placeholder="Select term..." /></SelectTrigger>
-            <SelectContent>
-              {termsWithResults.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <SearchableCombobox
+            options={termsWithResults}
+            value={selTerm}
+            onChange={setSelTerm}
+            placeholder="Select term..."
+            searchPlaceholder="Search terms..."
+          />
         </div>
         <div className="flex gap-1 bg-muted rounded-lg p-1">
           {(["mid_term", "end_of_term"] as const).map(t => (
@@ -3455,6 +3508,11 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
   const queryClient = useQueryClient();
   const [reportCard, setReportCard] = useState<{ studentId: string; termId: string; resultType: "mid_term" | "end_of_term" } | null>(null);
   const [editing, setEditing] = useState<any | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterTerm, setFilterTerm] = useState("all");
+  const [filterType, setFilterType] = useState("all");
+  const [filterGrade, setFilterGrade] = useState("all");
 
   const { data: allData } = useQuery({
     queryKey: ["all-results-admin"],
@@ -3543,6 +3601,18 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
   const termsWithResults = Array.from(new Map(results.map((r: any) => [r.term_id, r.termName])).entries())
     .map(([id, name]) => ({ id, name }));
 
+  const gradesUsed = Array.from(new Set(results.map((r: any) => r.grade_letter).filter(Boolean))).sort();
+
+  const filteredResults = results.filter((r: any) => {
+    const studentName = r.studentData ? `${r.studentData.first_name} ${r.studentData.last_name}` : "";
+    const query = searchQuery.trim().toLowerCase();
+    if (query && !studentName.toLowerCase().includes(query) && !r.subjectName?.toLowerCase().includes(query)) return false;
+    if (filterTerm !== "all" && r.term_id !== filterTerm) return false;
+    if (filterType !== "all" && r.result_type !== filterType) return false;
+    if (filterGrade !== "all" && r.grade_letter !== filterGrade) return false;
+    return true;
+  });
+
   return (
     <div className="space-y-8">
       {reportCard && (
@@ -3599,7 +3669,7 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
           {results.length > 0 && (
             <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={() => {
               const rows = [["Student", "Subject", "Score", "Grade", "Type", "Term"]];
-              results.forEach((r: any) => {
+              filteredResults.forEach((r: any) => {
                 rows.push([
                   r.studentData ? `${r.studentData.first_name} ${r.studentData.last_name}` : "—",
                   r.subjectName, String(r.total_score ?? ""), r.grade_letter || "—",
@@ -3616,6 +3686,59 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
             </Button>
           )}
         </div>
+
+        {/* Search & filters */}
+        <div className="bg-card rounded-xl p-4 shadow-card flex flex-wrap gap-3 items-end mb-4">
+          <div className="flex-1 min-w-[200px]">
+            <Label className="text-xs mb-1 block">Search</Label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search by student or subject..."
+                className="pl-8"
+              />
+            </div>
+          </div>
+          <div className="flex-1 min-w-[140px]">
+            <Label className="text-xs mb-1 block">Term</Label>
+            <Select value={filterTerm} onValueChange={setFilterTerm}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Terms</SelectItem>
+                {termsWithResults.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1 min-w-[140px]">
+            <Label className="text-xs mb-1 block">Type</Label>
+            <Select value={filterType} onValueChange={setFilterType}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="mid_term">Mid Term</SelectItem>
+                <SelectItem value="end_of_term">End of Term</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1 min-w-[120px]">
+            <Label className="text-xs mb-1 block">Grade</Label>
+            <Select value={filterGrade} onValueChange={setFilterGrade}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Grades</SelectItem>
+                {gradesUsed.map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {(searchQuery || filterTerm !== "all" || filterType !== "all" || filterGrade !== "all") && (
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setSearchQuery(""); setFilterTerm("all"); setFilterType("all"); setFilterGrade("all"); }}>
+              Clear filters
+            </Button>
+          )}
+        </div>
+
         <div className="bg-card rounded-xl shadow-card overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted">
@@ -3630,7 +3753,7 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
               </tr>
             </thead>
             <tbody>
-              {results.map((result: any) => (
+              {filteredResults.map((result: any) => (
                 <tr key={result.id} className="border-t border-border">
                   <td className="p-3 text-foreground">
                     {result.studentData ? `${result.studentData.first_name} ${result.studentData.last_name}` : "—"}
@@ -3658,8 +3781,10 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
                   </td>
                 </tr>
               ))}
-              {!results.length && (
-                <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No results yet.</td></tr>
+              {!filteredResults.length && (
+                <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">
+                  {results.length ? "No results match your search/filters." : "No results yet."}
+                </td></tr>
               )}
             </tbody>
           </table>
