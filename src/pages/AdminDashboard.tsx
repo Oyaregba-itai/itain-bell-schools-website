@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle, Send, CheckCircle, Banknote, Receipt, TrendingDown, CreditCard, Calendar, Megaphone, Clock, UserPlus, KeyRound, History } from "lucide-react";
+import { Plus, Users, GraduationCap, BookOpen, BarChart3, ClipboardCheck, Trash2, Check, X, Printer, ChevronRight, ChevronLeft, Copy, Upload, Pencil, TrendingUp, AlertCircle, CheckCircle, Banknote, Receipt, TrendingDown, CreditCard, Calendar, Megaphone, Clock, UserPlus, KeyRound, History } from "lucide-react";
 import AnnouncementsView from "@/components/AnnouncementsView";
 import TimetableView from "@/components/TimetableView";
 import MessagingView from "@/components/MessagingView";
@@ -41,14 +41,14 @@ const AdminDashboard = () => {
     enabled: !!user,
   });
 
-  const { data: pendingResultsCount } = useQuery({
+  const { data: pendingCounts } = useQuery({
     queryKey: ["admin-pending-results-count"],
     queryFn: async () => {
       const [subsRes, reqsRes] = await Promise.all([
         supabase.from("report_submissions").select("id", { count: "exact" }).eq("status", "submitted"),
         supabase.from("score_upload_requests").select("id", { count: "exact" }).eq("status", "pending"),
       ]);
-      return (subsRes.count || 0) + (reqsRes.count || 0);
+      return { submissions: subsRes.count || 0, requests: reqsRes.count || 0 };
     },
   });
 
@@ -65,7 +65,7 @@ const AdminDashboard = () => {
   ];
 
   return (
-    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} extraTabs={extraTabs} tabBadges={{ requests: pendingResultsCount || 0 }}>
+    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} extraTabs={extraTabs} tabBadges={{ requests: pendingCounts?.requests || 0, "submitted-results": pendingCounts?.submissions || 0 }}>
       {activeTab === "overview" && <AdminOverview />}
       {activeTab === "profile" && <ProfilePage />}
       {activeTab === "users" && <ManageUsers />}
@@ -76,6 +76,7 @@ const AdminDashboard = () => {
       {activeTab === "admissions" && <ManageAdmissions />}
       {activeTab === "events" && <ManageEvents />}
       {activeTab === "results" && <ViewAllResults isSuperAdmin={isSuperAdmin} />}
+      {activeTab === "submitted-results" && <SubmittedReportCards />}
       {activeTab === "requests" && <RequestsPanel />}
       {activeTab === "finances" && <FinancesView />}
       {activeTab === "announcements" && <AnnouncementsView />}
@@ -2966,11 +2967,8 @@ const RequestsPanel = () => {
   const { data: counts } = useQuery({
     queryKey: ["admin-requests-counts"],
     queryFn: async () => {
-      const [reqsRes, subsRes] = await Promise.all([
-        supabase.from("score_upload_requests").select("id", { count: "exact" }).eq("status", "pending"),
-        supabase.from("report_submissions").select("id", { count: "exact" }).eq("status", "submitted"),
-      ]);
-      return (reqsRes.count || 0) + (subsRes.count || 0);
+      const { count } = await supabase.from("score_upload_requests").select("id", { count: "exact" }).eq("status", "pending");
+      return count || 0;
     },
   });
 
@@ -2978,7 +2976,7 @@ const RequestsPanel = () => {
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-heading text-foreground">Requests</h3>
-        <p className="text-sm text-muted-foreground">Score upload access requests and submitted report cards awaiting your approval.</p>
+        <p className="text-sm text-muted-foreground">Score upload access requests awaiting your approval.</p>
       </div>
 
       {counts === 0 && (
@@ -2988,7 +2986,6 @@ const RequestsPanel = () => {
       )}
 
       <ScoreUploadRequestsPanel />
-      <SubmittedReportCards />
     </div>
   );
 };
@@ -3101,7 +3098,8 @@ const ScoreUploadRequestsPanel = () => {
 const SubmittedReportCards = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [previewSub, setPreviewSub] = useState<any | null>(null);
+  const [reviewing, setReviewing] = useState<any | null>(null);
+  const [schoolComment, setSchoolComment] = useState("");
 
   const { data: submissions } = useQuery({
     queryKey: ["submitted-report-cards"],
@@ -3128,9 +3126,14 @@ const SubmittedReportCards = () => {
   });
 
   const approveReport = useMutation({
-    mutationFn: async (sub: any) => {
+    mutationFn: async ({ sub, comment }: { sub: any; comment: string }) => {
       const { data: { user: u } } = await supabase.auth.getUser();
-      const { error } = await supabase.from("report_submissions").update({ status: "approved", approved_at: new Date().toISOString(), approved_by: u?.id }).eq("id", sub.id);
+      const { error } = await supabase.from("report_submissions").update({
+        head_of_school_comment: comment,
+        status: "approved",
+        approved_at: new Date().toISOString(),
+        approved_by: u?.id,
+      }).eq("id", sub.id);
       if (error) throw error;
 
       // Notify parents via email
@@ -3171,66 +3174,96 @@ const SubmittedReportCards = () => {
         );
       } catch { /* silent fail */ }
     },
-    onSuccess: (_data, sub) => {
-      toast({ title: "Report card approved — parents notified" });
+    onSuccess: (_data, { sub }) => {
+      toast({ title: "Report card uploaded — parents notified" });
       logActivity("Approved report card", `${sub.studentName} — ${sub.termName}`);
       queryClient.invalidateQueries({ queryKey: ["submitted-report-cards"] });
       queryClient.invalidateQueries({ queryKey: ["pending-submissions-count"] });
       queryClient.invalidateQueries({ queryKey: ["admin-pending-results-count"] });
       queryClient.invalidateQueries({ queryKey: ["admin-requests-counts"] });
-      setPreviewSub(null);
+      setReviewing(null);
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
-  if (!submissions?.length) return null;
-
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Send size={18} className="text-blue-600" />
-        <h3 className="text-lg font-heading text-foreground">Submitted Report Cards</h3>
-        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">{submissions.length} awaiting approval</span>
+      <div>
+        <h3 className="text-lg font-heading text-foreground">Submitted Results</h3>
+        <p className="text-sm text-muted-foreground">Report cards submitted by class head teachers, awaiting your review and upload.</p>
       </div>
 
-      {previewSub && (
-        <ReportCard studentId={previewSub.student_id} termId={previewSub.term_id} resultType={previewSub.result_type} onClose={() => setPreviewSub(null)} />
+      {!submissions?.length ? (
+        <div className="bg-card rounded-xl p-8 shadow-card text-center text-sm text-muted-foreground">
+          No submitted report cards right now.
+        </div>
+      ) : (
+        <div className="bg-card rounded-xl shadow-card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted">
+              <tr>
+                <th className="text-left p-3 font-medium text-muted-foreground">Student</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Term</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Type</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Submitted by</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Head Teacher Comment</th>
+                <th className="p-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {submissions.map((sub: any) => (
+                <tr key={sub.id} className="border-t border-border">
+                  <td className="p-3 font-medium text-foreground">{sub.studentName}</td>
+                  <td className="p-3 text-muted-foreground">{sub.termName}</td>
+                  <td className="p-3 text-muted-foreground capitalize text-xs">{sub.result_type?.replace("_", " ")}</td>
+                  <td className="p-3 text-muted-foreground text-xs">{sub.headName}</td>
+                  <td className="p-3 text-muted-foreground text-xs max-w-xs truncate">{sub.head_teacher_comment || "—"}</td>
+                  <td className="p-3">
+                    <button
+                      onClick={() => { setReviewing(sub); setSchoolComment(sub.head_of_school_comment || ""); }}
+                      className="text-xs text-primary hover:underline font-medium"
+                    >
+                      Review
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
-      <div className="bg-card rounded-xl shadow-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted">
-            <tr>
-              <th className="text-left p-3 font-medium text-muted-foreground">Student</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Term</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Type</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Submitted by</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Comment</th>
-              <th className="p-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {submissions.map((sub: any) => (
-              <tr key={sub.id} className="border-t border-border">
-                <td className="p-3 font-medium text-foreground">{sub.studentName}</td>
-                <td className="p-3 text-muted-foreground">{sub.termName}</td>
-                <td className="p-3 text-muted-foreground capitalize text-xs">{sub.result_type?.replace("_", " ")}</td>
-                <td className="p-3 text-muted-foreground text-xs">{sub.headName}</td>
-                <td className="p-3 text-muted-foreground text-xs max-w-xs truncate">{sub.head_teacher_comment || "—"}</td>
-                <td className="p-3">
-                  <div className="flex gap-2">
-                    <button onClick={() => setPreviewSub(sub)} className="text-xs text-primary hover:underline font-medium">Preview</button>
-                    <button onClick={() => approveReport.mutate(sub)} disabled={approveReport.isPending}
-                      className="flex items-center gap-1 text-xs bg-green-600 text-white px-2.5 py-1 rounded-lg hover:bg-green-700 transition-colors font-medium">
-                      <CheckCircle size={11} /> Approve
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <Dialog open={!!reviewing} onOpenChange={open => !open && setReviewing(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Report Card — {reviewing?.studentName}</DialogTitle>
+          </DialogHeader>
+          {reviewing && (
+            <div className="space-y-4">
+              <ReportCard studentId={reviewing.student_id} termId={reviewing.term_id} resultType={reviewing.result_type} inline />
+
+              <div>
+                <Label className="text-sm font-medium">Head of School Comment</Label>
+                <Textarea
+                  value={schoolComment}
+                  onChange={e => setSchoolComment(e.target.value)}
+                  placeholder="Write the Head of School's comment on this student's overall performance..."
+                  rows={3}
+                  className="mt-1"
+                />
+              </div>
+
+              <Button
+                className="w-full hero-gradient gap-2"
+                onClick={() => approveReport.mutate({ sub: reviewing, comment: schoolComment })}
+                disabled={approveReport.isPending}
+              >
+                <CheckCircle size={15} /> {approveReport.isPending ? "Uploading..." : "Save & Upload Report Card"}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
@@ -3284,7 +3317,7 @@ const LiveReportCardPreview = ({
     queryFn: async () => {
       const { data } = await supabase
         .from("report_submissions")
-        .select("head_teacher_comment, head_of_school_comment")
+        .select("head_of_school_comment")
         .eq("student_id", selStudent)
         .eq("term_id", selTerm)
         .eq("result_type", selType)
@@ -3293,29 +3326,8 @@ const LiveReportCardPreview = ({
     },
   });
 
-  const [headComment, setHeadComment] = useState("");
-  useEffect(() => { setHeadComment(submission?.head_teacher_comment || ""); }, [submission, selStudent, selTerm, selType]);
-
   const [schoolHeadComment, setSchoolHeadComment] = useState("");
   useEffect(() => { setSchoolHeadComment(submission?.head_of_school_comment || ""); }, [submission, selStudent, selTerm, selType]);
-
-  const saveHeadComment = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("report_submissions").upsert({
-        student_id: selStudent,
-        term_id: selTerm,
-        result_type: selType,
-        head_teacher_comment: headComment,
-      }, { onConflict: "student_id,term_id,result_type" });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({ title: "Head teacher comment saved — report card refreshed" });
-      queryClient.invalidateQueries({ queryKey: ["report-submission-admin", selStudent, selTerm, selType] });
-      queryClient.invalidateQueries({ queryKey: ["report-card", selStudent, selTerm, selType] });
-    },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
-  });
 
   const saveSchoolHeadComment = useMutation({
     mutationFn: async () => {
@@ -3416,20 +3428,6 @@ const LiveReportCardPreview = ({
                   />
                 </div>
               ))}
-            </div>
-
-            <div className="border-t border-border pt-3 space-y-2">
-              <h4 className="font-heading font-semibold text-foreground text-sm">Head Teacher Comment</h4>
-              <Textarea
-                value={headComment}
-                onChange={e => setHeadComment(e.target.value)}
-                placeholder="Write the head teacher's comment on this student's overall performance..."
-                rows={3}
-                className="text-sm"
-              />
-              <Button size="sm" className="hero-gradient" onClick={() => saveHeadComment.mutate()} disabled={saveHeadComment.isPending}>
-                {saveHeadComment.isPending ? "Saving..." : "Save Comment"}
-              </Button>
             </div>
 
             <div className="border-t border-border pt-3 space-y-2">

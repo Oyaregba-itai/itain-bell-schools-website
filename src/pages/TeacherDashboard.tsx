@@ -44,7 +44,10 @@ const TeacherDashboard = () => {
 
   const extraTabs = [
     ...(isHeadOfClass
-      ? [{ id: "my-class", label: `My Class${headClasses?.[0]?.name ? ` — ${headClasses[0].name}` : ""}`, icon: Users }]
+      ? [
+          { id: "my-class", label: `My Class${headClasses?.[0]?.name ? ` — ${headClasses[0].name}` : ""}`, icon: Users },
+          { id: "report-cards", label: "Report Cards", icon: ClipboardCheck },
+        ]
       : []),
     ...(isFinanceHead ? [{ id: "finances", label: "Finances", icon: Banknote }] : []),
   ];
@@ -57,6 +60,7 @@ const TeacherDashboard = () => {
       {activeTab === "upload" && <UploadResults />}
       {activeTab === "my-results" && <MyResults />}
       {activeTab === "my-class" && isHeadOfClass && <MyClassView headClasses={headClasses!} />}
+      {activeTab === "report-cards" && isHeadOfClass && user && <HeadOfClassReports userId={user.id} headClasses={headClasses!} />}
       {activeTab === "finances" && isFinanceHead && <FinancesView />}
       {activeTab === "timetable" && <TimetableView />}
       {activeTab === "events" && <EventsView />}
@@ -372,10 +376,6 @@ const TeacherOverview = ({ onTabChange }: { onTabChange: (tab: string) => void }
         </div>
       )}
 
-      {/* Head-of-class report submission section */}
-      {(overview?.headClasses?.length ?? 0) > 0 && user && (
-        <HeadOfClassReports userId={user.id} headClasses={overview!.headClasses} />
-      )}
     </div>
   );
 };

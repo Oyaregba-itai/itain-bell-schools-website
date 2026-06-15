@@ -1,7 +1,7 @@
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, Users, BookOpen, GraduationCap, BarChart3, Calendar, Megaphone, Clock, Menu, ArrowLeft, MessageCircle, UserPlus, Banknote, ClipboardCheck, Bell } from "lucide-react";
+import { LogOut, Users, BookOpen, GraduationCap, BarChart3, Calendar, Megaphone, Clock, Menu, ArrowLeft, MessageCircle, UserPlus, Banknote, ClipboardCheck, Bell, Send } from "lucide-react";
 import { ReactNode, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -81,6 +81,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange, extraTabs = [], tab
     { id: "terms", label: "Terms", icon: Calendar },
     { id: "events", label: "Events", icon: Calendar },
     { id: "results", label: "All Results", icon: BarChart3 },
+    { id: "submitted-results", label: "Submitted Results", icon: Send },
     { id: "requests", label: "Requests", icon: ClipboardCheck },
     { id: "finances", label: "Finances", icon: Banknote },
     { id: "announcements", label: "Announcements", icon: Megaphone },
