@@ -2605,14 +2605,12 @@ const ManageAdmissions = () => {
               <div className="grid grid-cols-2 gap-x-6 gap-y-2">
                 {[
                   ["Child Name", selected.child_full_name],
+                  ...(selected.other_names ? [["Other Names", selected.other_names]] : []),
                   ["Gender", selected.gender || "—"],
                   ["Date of Birth", selected.date_of_birth ? new Date(selected.date_of_birth + "T00:00:00").toLocaleDateString() : "—"],
                   ["Section", selected.school_section || "—"],
                   ["Class Applying", selected.class_applying_for || "—"],
                   ["Previous School", selected.previous_school || "—"],
-                  ["Parent Name", selected.parent_name],
-                  ["Parent Email", selected.parent_email],
-                  ["Parent Phone", selected.parent_phone || "—"],
                   ["Applied", new Date(selected.created_at).toLocaleDateString()],
                 ].map(([label, val]) => (
                   <div key={label}>
@@ -2621,6 +2619,21 @@ const ManageAdmissions = () => {
                   </div>
                 ))}
               </div>
+
+              {/* Guardians */}
+              <div>
+                <div className="text-muted-foreground text-xs mb-1">Parent / Guardian(s)</div>
+                <div className="space-y-2">
+                  {(selected.guardians && selected.guardians.length > 0 ? selected.guardians : [{ name: selected.parent_name, email: selected.parent_email, phone: selected.parent_phone, relationship: "" }]).map((g: any, i: number) => (
+                    <div key={i} className="bg-muted rounded-lg px-3 py-2 text-sm">
+                      <span className="font-medium text-foreground">{g.name}</span>
+                      {g.relationship && <span className="text-muted-foreground text-xs ml-2 capitalize">({g.relationship})</span>}
+                      <div className="text-muted-foreground text-xs mt-0.5">{g.email}{g.phone ? ` · ${g.phone}` : ""}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {selected.address && (
                 <div>
                   <div className="text-muted-foreground text-xs">Address</div>
