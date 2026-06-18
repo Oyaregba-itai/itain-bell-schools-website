@@ -387,6 +387,9 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
   const [selType, setSelType] = useState<"mid_term" | "end_of_term">("mid_term");
   const [reviewing, setReviewing] = useState<any | null>(null);
   const [headComment, setHeadComment] = useState("");
+  const [attendanceDaysOpen, setAttendanceDaysOpen] = useState("");
+  const [attendanceDaysPresent, setAttendanceDaysPresent] = useState("");
+  const [attendanceNextTerm, setAttendanceNextTerm] = useState("");
   const [previewCard, setPreviewCard] = useState<{ studentId: string; termId: string } | null>(null);
 
   const classId = headClasses[0]?.id;
@@ -403,9 +406,12 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
     queryKey: ["hoc-class-data", classId, selTerm, selType],
     enabled: !!(classId && selTerm),
     queryFn: async () => {
-      // All students in this class
-      const { data: students } = await supabase.from("students").select("*").eq("class_id", classId).order("full_name");
+      const [{ data: students }, { data: cls }] = await Promise.all([
+        supabase.from("students").select("*").eq("class_id", classId).order("full_name"),
+        supabase.from("classes").select("report_format").eq("id", classId).single(),
+      ]);
       const studentList = students || [];
+      const isCommentMode = cls?.report_format === "comment";
       const studentIds = studentList.map((s: any) => s.id);
 
       // All subjects for this class
@@ -441,7 +447,7 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
         return { student, subjects, resultMap, uploaded, total, submission };
       });
 
-      return { studentSummaries, subjects };
+      return { studentSummaries, subjects, isCommentMode };
     },
   });
 
@@ -455,6 +461,11 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
         head_teacher_comment: comment,
         status: "submitted",
         submitted_at: new Date().toISOString(),
+        ...(classData?.isCommentMode ? {
+          days_open: attendanceDaysOpen ? parseInt(attendanceDaysOpen) : null,
+          days_present: attendanceDaysPresent ? parseInt(attendanceDaysPresent) : null,
+          next_term_begins: attendanceNextTerm || null,
+        } : {}),
       }, { onConflict: "student_id,term_id,result_type" });
       if (error) throw error;
 
@@ -475,6 +486,9 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
       queryClient.invalidateQueries({ queryKey: ["hoc-class-data"] });
       setReviewing(null);
       setHeadComment("");
+      setAttendanceDaysOpen("");
+      setAttendanceDaysPresent("");
+      setAttendanceNextTerm("");
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -552,7 +566,13 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
                       : <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Incomplete</span>
                   }
                   <Button size="sm" variant="outline" className="text-xs h-7"
-                    onClick={() => { setReviewing(item); setHeadComment(submission?.head_teacher_comment || ""); }}>
+                    onClick={() => {
+                      setReviewing(item);
+                      setHeadComment(submission?.head_teacher_comment || "");
+                      setAttendanceDaysOpen(submission?.days_open ? String(submission.days_open) : "");
+                      setAttendanceDaysPresent(submission?.days_present ? String(submission.days_present) : "");
+                      setAttendanceNextTerm(submission?.next_term_begins || "");
+                    }}>
                     {isSubmitted ? "View" : "Review & Submit"}
                   </Button>
                 </div>
@@ -586,13 +606,26 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
                   <thead className="bg-muted">
                     <tr>
                       <th className="text-left p-2.5 font-medium text-muted-foreground">Subject</th>
-                      <th className="text-center p-2.5 font-medium text-muted-foreground">Score /{selType === "mid_term" ? 30 : 70}</th>
-                      <th className="text-center p-2.5 font-medium text-muted-foreground">Grade</th>
+                      {classData?.isCommentMode
+                        ? <th className="text-left p-2.5 font-medium text-muted-foreground">Comment</th>
+                        : <>
+                            <th className="text-center p-2.5 font-medium text-muted-foreground">Score /{selType === "mid_term" ? 30 : 70}</th>
+                            <th className="text-center p-2.5 font-medium text-muted-foreground">Grade</th>
+                          </>
+                      }
                     </tr>
                   </thead>
                   <tbody>
                     {reviewing.subjects.map((s: any) => {
                       const r = reviewing.resultMap[s.id];
+                      if (classData?.isCommentMode) {
+                        return (
+                          <tr key={s.id} className="border-t border-border">
+                            <td className="p-2.5 font-medium">{s.name}</td>
+                            <td className="p-2.5 text-sm">{r?.teacher_comments || <span className="text-amber-500 text-xs">No comment uploaded</span>}</td>
+                          </tr>
+                        );
+                      }
                       const score = r ? Number(r.total_score) : null;
                       const grade = r?.grade_letter || null;
                       return (
@@ -612,8 +645,8 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
                 </table>
               </div>
 
-              {/* Summary */}
-              {(() => {
+              {/* Summary (score mode only) */}
+              {!classData?.isCommentMode && (() => {
                 const scores = reviewing.subjects.map((s: any) => reviewing.resultMap[s.id]?.total_score).filter((v: any) => v != null).map(Number);
                 const total = scores.reduce((a: number, b: number) => a + b, 0);
                 const avg = scores.length > 0 ? (total / scores.length).toFixed(2) : "—";
@@ -625,6 +658,24 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
                   </div>
                 );
               })()}
+
+              {/* Attendance (comment mode only) */}
+              {classData?.isCommentMode && (
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <Label className="text-xs mb-1 block">Days School Open</Label>
+                    <Input type="number" value={attendanceDaysOpen} onChange={e => setAttendanceDaysOpen(e.target.value)} placeholder="e.g. 106" className="h-8 text-sm" disabled={reviewing?.submission?.status === "approved"} />
+                  </div>
+                  <div>
+                    <Label className="text-xs mb-1 block">Days Present</Label>
+                    <Input type="number" value={attendanceDaysPresent} onChange={e => setAttendanceDaysPresent(e.target.value)} placeholder="e.g. 100" className="h-8 text-sm" disabled={reviewing?.submission?.status === "approved"} />
+                  </div>
+                  <div>
+                    <Label className="text-xs mb-1 block">Next Term Begins</Label>
+                    <Input value={attendanceNextTerm} onChange={e => setAttendanceNextTerm(e.target.value)} placeholder="e.g. Mon 27th April 2026" className="h-8 text-sm" disabled={reviewing?.submission?.status === "approved"} />
+                  </div>
+                </div>
+              )}
 
               {/* Head teacher comment */}
               <div>
@@ -645,12 +696,14 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
 
               {reviewing?.submission?.status !== "approved" && (() => {
                 const complete = reviewing.uploaded >= reviewing.total && reviewing.total > 0;
+                const incompleteMsg = classData?.isCommentMode
+                  ? `All subject comments must be uploaded before submitting. (${reviewing.uploaded}/${reviewing.total} uploaded)`
+                  : `All subject scores must be uploaded before this report card can be submitted. (${reviewing.uploaded}/${reviewing.total} subjects uploaded)`;
                 return (
                   <>
                     {!complete && (
                       <p className="text-center text-sm text-amber-600 bg-amber-50 rounded-lg p-2">
-                        All subject scores must be uploaded before this report card can be submitted.
-                        ({reviewing.uploaded}/{reviewing.total} subjects uploaded)
+                        {incompleteMsg}
                       </p>
                     )}
                     <Button className="w-full hero-gradient gap-2" onClick={() => submitReport.mutate({ studentId: reviewing.student.id, comment: headComment })} disabled={submitReport.isPending || !complete}>
@@ -1193,12 +1246,15 @@ export const UploadResults = () => {
       const { data: students } = await supabase.from("students").select("*").eq("class_id", selectedSubject?.class_id).order("full_name");
       const studentList = students || [];
       const studentIds = studentList.map((s: any) => s.id);
-      const { data: existing } = studentIds.length > 0
-        ? await supabase.from("results").select("*").eq("subject_id", selectedSubject?.id).eq("term_id", selTerm).eq("result_type", selType).in("student_id", studentIds)
-        : { data: [] };
+      const [existingRes, clsRes] = await Promise.all([
+        studentIds.length > 0
+          ? supabase.from("results").select("*").eq("subject_id", selectedSubject?.id).eq("term_id", selTerm).eq("result_type", selType).in("student_id", studentIds)
+          : Promise.resolve({ data: [] as any[] }),
+        supabase.from("classes").select("report_format").eq("id", selectedSubject?.class_id).single(),
+      ]);
       const existingMap: Record<string, any> = {};
-      (existing || []).forEach((r: any) => { existingMap[r.student_id] = r; });
-      return { students: studentList, existingMap };
+      (existingRes.data || []).forEach((r: any) => { existingMap[r.student_id] = r; });
+      return { students: studentList, existingMap, isCommentMode: clsRes.data?.report_format === "comment" };
     },
   });
 
@@ -1212,11 +1268,34 @@ export const UploadResults = () => {
     let lastError: string | undefined;
     for (const student of classData.students) {
       const entry = scores[student.id];
-      if (!entry?.score && !entry?.dnp) continue;
       const existing = classData.existingMap[student.id];
       let error;
       try {
-        if (entry.dnp) {
+        if (classData.isCommentMode) {
+          if (!entry?.comment) continue;
+          if (existing) {
+            ({ error } = await supabase.from("results").update({
+              teacher_comments: entry.comment,
+              total_score: null,
+              grade_letter: null,
+              did_not_participate: false,
+            }).eq("id", existing.id));
+          } else {
+            ({ error } = await supabase.from("results").insert({
+              student_id: student.id,
+              subject_id: selectedSubject.id,
+              term_id: selTerm,
+              result_type: selType,
+              teacher_comments: entry.comment,
+              total_score: null,
+              grade_letter: null,
+              did_not_participate: false,
+              uploaded_by: user.id,
+            }));
+          }
+        } else if (!entry?.score && !entry?.dnp) {
+          continue;
+        } else if (entry?.dnp) {
           if (existing) {
             ({ error } = await supabase.from("results").update({
               did_not_participate: true,
@@ -1287,7 +1366,7 @@ export const UploadResults = () => {
     }
   };
 
-  const filledCount = Object.values(scores).filter(s => s.score || s.dnp).length;
+  const filledCount = Object.values(scores).filter(s => classData?.isCommentMode ? !!s.comment : (s.score || s.dnp)).length;
 
   return (
     <div className="space-y-6">
@@ -1382,7 +1461,9 @@ export const UploadResults = () => {
               <p className="font-heading font-semibold text-foreground">
                 {selectedSubject?.name}{selectedSubject?.className ? ` (${selectedSubject.className})` : ""} — {selType === "mid_term" ? "Mid Term" : "End of Term"}
               </p>
-              <p className="text-xs text-muted-foreground mt-0.5">{classData.students.length} students · {filledCount} scores entered</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {classData.students.length} students · {filledCount} {classData.isCommentMode ? "comments" : "scores"} entered
+              </p>
             </div>
             <Button className="hero-gradient gap-2" onClick={saveAll} disabled={saving || filledCount === 0}>
               {saving ? "Saving..." : `Save ${filledCount > 0 ? `(${filledCount})` : "All"} Results`}
@@ -1394,9 +1475,14 @@ export const UploadResults = () => {
               <thead className="bg-muted">
                 <tr>
                   <th className="text-left p-3 font-medium text-muted-foreground">Student</th>
-                  <th className="text-center p-3 font-medium text-muted-foreground w-36">Score /{outOf}</th>
-                  <th className="text-center p-3 font-medium text-muted-foreground w-20">Grade</th>
-                  <th className="text-left p-3 font-medium text-muted-foreground">Comment (optional)</th>
+                  {classData.isCommentMode
+                    ? <th className="text-left p-3 font-medium text-muted-foreground">Comment</th>
+                    : <>
+                        <th className="text-center p-3 font-medium text-muted-foreground w-36">Score /{outOf}</th>
+                        <th className="text-center p-3 font-medium text-muted-foreground w-20">Grade</th>
+                        <th className="text-left p-3 font-medium text-muted-foreground">Comment (optional)</th>
+                      </>
+                  }
                   <th className="text-center p-3 font-medium text-muted-foreground w-20">Status</th>
                 </tr>
               </thead>
@@ -1404,6 +1490,39 @@ export const UploadResults = () => {
                 {classData.students.map((student: any) => {
                   const existing = classData.existingMap[student.id];
                   const entry = scores[student.id] || { score: existing && !existing.did_not_participate ? String(existing.total_score ?? "") : "", comment: existing?.teacher_comments || "", dnp: existing?.did_not_participate || false };
+
+                  if (classData.isCommentMode) {
+                    const isDirty = entry.comment !== (existing?.teacher_comments ?? "");
+                    return (
+                      <tr key={student.id} className={`border-t border-border transition-colors ${isDirty ? "bg-primary/5" : ""}`}>
+                        <td className="p-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
+                              {student.full_name?.[0]?.toUpperCase()}
+                            </div>
+                            <span className="font-medium text-foreground">{student.full_name}</span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <Input
+                            value={entry.comment}
+                            onChange={e => setScores(prev => ({ ...prev, [student.id]: { ...entry, comment: e.target.value } }))}
+                            className="h-8 text-xs"
+                            placeholder="e.g. She can count 1–20 fluently"
+                          />
+                        </td>
+                        <td className="p-3 text-center">
+                          {existing?.teacher_comments && !isDirty
+                            ? <span className="text-xs text-green-600 flex items-center justify-center gap-1"><CheckCircle size={12} /> Saved</span>
+                            : isDirty
+                              ? <span className="text-xs text-amber-600">Unsaved</span>
+                              : null
+                          }
+                        </td>
+                      </tr>
+                    );
+                  }
+
                   const scoreNum = parseFloat(entry.score) || 0;
                   const grade = entry.score && !entry.dnp ? getGradeForScore(scoreNum, outOf) : null;
                   const isDirty = entry.dnp

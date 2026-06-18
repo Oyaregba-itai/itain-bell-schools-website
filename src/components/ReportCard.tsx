@@ -34,7 +34,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
         supabase.from("students").select("*").eq("id", studentId).single(),
         supabase.from("terms").select("*").eq("id", termId).single(),
         supabase.from("results").select("*").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType),
-        supabase.from("report_submissions").select("head_teacher_comment, head_of_school_comment, approved_by").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType).maybeSingle(),
+        supabase.from("report_submissions").select("head_teacher_comment, head_of_school_comment, approved_by, days_present, days_open, next_term_begins").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType).maybeSingle(),
       ]);
       if (studentRes.error) throw studentRes.error;
 
@@ -44,8 +44,9 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
       let headTeacherSignatureUrl = "";
       let headOfSchoolSignatureUrl = "";
       if (studentRes.data?.class_id) {
-        const { data: cls } = await supabase.from("classes").select("name, head_teacher_id").eq("id", studentRes.data.class_id).single();
+        const { data: cls } = await supabase.from("classes").select("name, head_teacher_id, report_format").eq("id", studentRes.data.class_id).single();
         className = cls?.name || "—";
+        const isCommentMode = cls?.report_format === "comment";
         if (cls?.head_teacher_id) {
           const { data: headProfile } = await supabase.from("profiles").select("full_name, signature_url").eq("user_id", cls.head_teacher_id).maybeSingle();
           headTeacherName = headProfile?.full_name || "";
@@ -93,13 +94,17 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
         headTeacherName,
         headTeacherSignatureUrl,
         headOfSchoolSignatureUrl,
+        isCommentMode: isCommentMode ?? false,
+        daysOpen: submissionRes.data?.days_open ?? null,
+        daysPresent: submissionRes.data?.days_present ?? null,
+        nextTermBegins: submissionRes.data?.next_term_begins ?? null,
       };
     },
   });
 
   const handlePrint = () => {
     if (!data) return;
-    const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl } = data;
+    const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl, isCommentMode, daysOpen, daysPresent, nextTermBegins } = data;
     const scoredResults = results.filter((r: any) => !r.did_not_participate);
     const totalObtainable = scoredResults.length * 30;
     const totalObtained = scoredResults.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
@@ -115,6 +120,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
     const scoreLabel = resultType === "mid_term" ? "Mid Term" : "End of Term";
     const logoAbsUrl = new URL(schoolLogo, window.location.href).href;
     const photoUrl = student.avatar_url || "";
+    const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
     const subjectRows = results.map((r: any, i: number) => {
       const bg = i % 2 === 0 ? "#fff" : "#f8f9fa";
@@ -156,7 +162,80 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
       <td style="padding:2px 5px;border:1px solid #ccc;background:${g.color};color:white;text-align:center">&nbsp;</td></tr>`
     ).join("");
 
-    const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    if (isCommentMode) {
+      const commentRows = results.map((r: any, i: number) => {
+        const bg = i % 2 === 0 ? "#fff" : "#f8f9fa";
+        return `<tr style="background:${bg}">
+          <td style="padding:5px 8px;border-bottom:1px solid #ddd">${r.subjectName}</td>
+          <td style="padding:5px 8px;border-bottom:1px solid #ddd">${r.teacher_comments || ""}</td>
+        </tr>`;
+      }).join("");
+      const daysAbsent = (daysOpen != null && daysPresent != null) ? daysOpen - daysPresent : "—";
+      const commentHtml = `<!DOCTYPE html><html><head><title>${studentName} — ${reportHeader}</title>
+      <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:12px}
+      @media print{body{padding:0}@page{margin:8mm;size:A4}}table{border-collapse:collapse}</style>
+      </head><body>
+      <table style="width:100%;border:2px solid #333;margin-bottom:0"><tr>
+        <td style="border:1px solid #333;padding:6px;text-align:center;width:75px" rowspan="2">
+          <img src="${logoAbsUrl}" style="height:55px;max-width:65px" onerror="this.style.display='none'">
+        </td>
+        <td style="border:1px solid #333;text-align:center;padding:6px 8px">
+          <div style="font-size:18px;font-weight:bold;letter-spacing:5px">I T A I N - B E L L &nbsp; S C H O O L S</div>
+          <div style="font-size:9px;margin-top:3px;color:#444">7, Mustapha Street, Off Olanrewaju or Olayiwola Street, Oregun, Ikeja, Lagos.</div>
+        </td></tr><tr>
+        <td style="border:1px solid #333;text-align:center;padding:5px 8px;background:#d6e8f7">
+          <strong>${termName.toUpperCase()} ${reportHeader} ${session} SESSION</strong>
+        </td></tr></table>
+      <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
+        <td style="border:1px solid #333;padding:4px;text-align:center;width:75px;vertical-align:middle" rowspan="3">
+          ${photoUrl ? `<img src="${photoUrl}" style="width:65px;height:80px;object-fit:cover">` : `<div style="width:65px;height:80px;background:#eee;display:flex;align-items:center;justify-content:center;font-size:8px;color:#999">No Photo</div>`}
+        </td>
+        <td style="border:1px solid #333;padding:4px 8px;width:22%"><strong>Name:</strong></td>
+        <td style="border:1px solid #333;padding:4px 8px" colspan="2"><strong>${studentName}</strong></td></tr><tr>
+        <td style="border:1px solid #333;padding:4px 8px"><strong>Sex:</strong></td>
+        <td style="border:1px solid #333;padding:4px 8px">${gender}</td>
+        <td style="border:1px solid #333;padding:4px 8px"></td></tr><tr>
+        <td style="border:1px solid #333;padding:4px 8px"><strong>Class:</strong></td>
+        <td style="border:1px solid #333;padding:4px 8px">${student.className}</td>
+        <td style="border:1px solid #333;padding:4px 8px"><strong>Age:</strong> ${age}</td>
+      </tr></table>
+      <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
+        <td style="border:1px solid #333;padding:0;vertical-align:top;width:62%">
+          <table style="width:100%;border-collapse:collapse;font-size:10px"><thead>
+            <tr style="background:#d6e8f7">
+              <th style="padding:5px 8px;border-bottom:1px solid #333;text-align:left;width:35%">SUBJECTS</th>
+              <th style="padding:5px 8px;border-bottom:1px solid #333;text-align:left">COMMENTS</th>
+            </tr></thead><tbody>${commentRows}</tbody></table>
+        </td>
+        <td style="border:1px solid #333;padding:10px 12px;vertical-align:top;width:38%">
+          <table style="width:100%;border-collapse:collapse;font-size:10px">
+            <tr><td style="padding:5px 0;border-bottom:1px solid #eee;font-weight:bold">Days School Open:</td><td style="padding:5px 0;border-bottom:1px solid #eee;text-align:right">${daysOpen ?? "—"}</td></tr>
+            <tr><td style="padding:5px 0;border-bottom:1px solid #eee;font-weight:bold">Days Present:</td><td style="padding:5px 0;border-bottom:1px solid #eee;text-align:right">${daysPresent ?? "—"}</td></tr>
+            <tr><td style="padding:5px 0;border-bottom:1px solid #eee;font-weight:bold">Days Absent:</td><td style="padding:5px 0;border-bottom:1px solid #eee;text-align:right">${daysAbsent}</td></tr>
+            <tr><td style="padding:5px 0;font-weight:bold">Next Term Begins:</td><td style="padding:5px 0;text-align:right;font-size:9px">${nextTermBegins ?? "—"}</td></tr>
+          </table>
+        </td></tr></table>
+      <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
+        <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Class Teacher Comments</td></tr><tr>
+        <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headTeacherComment}</td>
+        <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date: ${today}</td>
+        <td style="border:1px solid #333;padding:5px 8px;font-size:10px">${headTeacherSignatureUrl ? `<img src="${headTeacherSignatureUrl}" style="height:28px;max-width:90px;object-fit:contain" alt="signature" />` : "Signature: ___________"}</td></tr><tr>
+        <td colspan="3" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Class Teacher:</strong> ${headTeacherName || "—"}</td></tr></table>
+      <table style="width:100%;border:2px solid #333;border-top:0"><tr>
+        <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Head of School Comments</td></tr><tr>
+        <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headOfSchoolComment}</td>
+        <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date: ${today}</td>
+        <td style="border:1px solid #333;padding:5px 8px;font-size:10px">${headOfSchoolSignatureUrl ? `<img src="${headOfSchoolSignatureUrl}" style="height:28px;max-width:90px;object-fit:contain" alt="signature" />` : "Signature: ___________"}</td></tr><tr>
+        <td colspan="3" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Acting Head of School:</strong> Mrs Goodness Duru</td></tr></table>
+      </body></html>`;
+      const win = window.open("", "_blank", "width=900,height=1100");
+      if (!win) return;
+      win.document.write(commentHtml);
+      win.document.close();
+      win.focus();
+      setTimeout(() => win.print(), 500);
+      return;
+    }
 
     const html = `<!DOCTYPE html><html><head><title>${studentName} — ${reportHeader}</title>
     <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:12px}
@@ -250,7 +329,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
 
   if (!data) return null;
 
-  const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl } = data;
+  const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl, isCommentMode, daysOpen, daysPresent, nextTermBegins } = data;
   const scoredResults = results.filter((r: any) => !r.did_not_participate);
   const totalObtainable = scoredResults.length * 30;
   const totalObtained = scoredResults.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
@@ -307,26 +386,42 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
                   : <div className="w-16 h-20 bg-gray-100 flex items-center justify-center text-[8px] text-gray-400">No Photo</div>
                 }
               </div>
-              <div className="flex-1 grid grid-cols-4">
-                {[
-                  ["Name:", studentName, `${reportLabel} Score Obtainable:`, totalObtainable],
-                  ["Sex:", student.gender?.toUpperCase() || "—", `${reportLabel} Score Obtained:`, totalObtained],
-                  ["Class:", student.className, `${reportLabel} Average:`, average.toFixed(2)],
-                  ["Age:", age, `${reportLabel} Grade:`, null],
-                ].map(([l1, v1, l2, v2], i) => (
-                  <div key={i} className="contents">
-                    <div className="border-b border-r border-gray-400 px-2 py-1.5 font-semibold">{l1}</div>
-                    <div className="border-b border-r border-gray-400 px-2 py-1.5">{v1}</div>
-                    <div className="border-b border-r border-gray-400 px-2 py-1.5 font-semibold">{l2}</div>
-                    <div className="border-b border-gray-400 px-2 py-1.5">
-                      {l2.includes("Grade")
-                        ? <span className="font-bold" style={{ color: overallGrade.color }}>{overallGrade.letter}</span>
-                        : <span className="italic">{v2}</span>
-                      }
+              {isCommentMode ? (
+                <div className="flex-1 grid grid-cols-2">
+                  {[
+                    ["Name:", studentName],
+                    ["Sex:", student.gender?.toUpperCase() || "—"],
+                    ["Class:", student.className],
+                    ["Age:", age],
+                  ].map(([l, v], i) => (
+                    <div key={i} className="contents">
+                      <div className="border-b border-r border-gray-400 px-2 py-1.5 font-semibold">{l}</div>
+                      <div className="border-b border-gray-400 px-2 py-1.5">{v}</div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex-1 grid grid-cols-4">
+                  {[
+                    ["Name:", studentName, `${reportLabel} Score Obtainable:`, totalObtainable],
+                    ["Sex:", student.gender?.toUpperCase() || "—", `${reportLabel} Score Obtained:`, totalObtained],
+                    ["Class:", student.className, `${reportLabel} Average:`, average.toFixed(2)],
+                    ["Age:", age, `${reportLabel} Grade:`, null],
+                  ].map(([l1, v1, l2, v2], i) => (
+                    <div key={i} className="contents">
+                      <div className="border-b border-r border-gray-400 px-2 py-1.5 font-semibold">{l1}</div>
+                      <div className="border-b border-r border-gray-400 px-2 py-1.5">{v1}</div>
+                      <div className="border-b border-r border-gray-400 px-2 py-1.5 font-semibold">{l2}</div>
+                      <div className="border-b border-gray-400 px-2 py-1.5">
+                        {(l2 as string).includes("Grade")
+                          ? <span className="font-bold" style={{ color: overallGrade.color }}>{overallGrade.letter}</span>
+                          : <span className="italic">{v2}</span>
+                        }
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -335,7 +430,50 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
             ACADEMICS (COGNITIVE DOMAIN)
           </div>
 
-          {/* Results table + chart side by side */}
+          {isCommentMode ? (
+            /* Comment mode: subject comments + attendance */
+            <div className="border-2 border-gray-800 border-t-0 flex">
+              <div className="flex-[3] border-r border-gray-800 overflow-x-auto">
+                <table className="w-full border-collapse text-[10px]">
+                  <thead>
+                    <tr className="bg-blue-100">
+                      <th className="text-left px-2 py-1.5 border-b border-gray-400 font-semibold w-[40%]">SUBJECTS</th>
+                      <th className="text-left px-2 py-1.5 border-b border-l border-gray-400 font-semibold">COMMENTS</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {results.map((r: any, i: number) => (
+                      <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <td className="px-2 py-1 border-b border-gray-200">{r.subjectName}</td>
+                        <td className="px-2 py-1 border-b border-l border-gray-200">{r.teacher_comments || ""}</td>
+                      </tr>
+                    ))}
+                    {!results.length && (
+                      <tr><td colSpan={2} className="px-4 py-6 text-center text-gray-400">No results for this report type.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex-[2] p-3 text-[10px]">
+                <table className="w-full border-collapse">
+                  <tbody>
+                    {[
+                      ["Days School Open:", daysOpen ?? "—"],
+                      ["Days Present:", daysPresent ?? "—"],
+                      ["Days Absent:", daysOpen != null && daysPresent != null ? daysOpen - daysPresent : "—"],
+                      ["Next Term Begins:", nextTermBegins ?? "—"],
+                    ].map(([l, v]) => (
+                      <tr key={String(l)} className="border-b border-gray-200">
+                        <td className="py-1.5 font-semibold pr-2">{l}</td>
+                        <td className="py-1.5 text-right">{String(v)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+          /* Score mode: results table + chart side by side */
           <div className="border-2 border-gray-800 border-t-0 flex">
             {/* Subjects table */}
             <div className="flex-1 border-r border-gray-800 overflow-x-auto">
@@ -423,6 +561,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
               <p className="text-[7px] text-gray-500 leading-tight">N.B: PTE means PROGRESSING TOWARDS EXPECTATION and NME means NOT MEETING EXPECTATION</p>
             </div>
           </div>
+          )}
 
           {/* Head teacher comment */}
           <div className="border-2 border-gray-800 border-t-0">
