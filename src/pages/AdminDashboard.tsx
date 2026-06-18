@@ -3533,6 +3533,15 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
   const [filterTerm, setFilterTerm] = useState("all");
   const [filterType, setFilterType] = useState("all");
   const [filterGrade, setFilterGrade] = useState("all");
+  const [filterClass, setFilterClass] = useState("all");
+
+  const { data: allClasses } = useQuery({
+    queryKey: ["all-classes-list"],
+    queryFn: async () => {
+      const { data } = await supabase.from("classes").select("id, name").order("name");
+      return data || [];
+    },
+  });
 
   const { data: allData } = useQuery({
     queryKey: ["all-results-admin"],
@@ -3546,7 +3555,7 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
       const termIds = [...new Set(rows.map((r: any) => r.term_id).filter(Boolean))];
 
       const [studentRes, subjectRes, termRes] = await Promise.all([
-        studentIds.length > 0 ? supabase.from("students").select("id, first_name, last_name").in("id", studentIds) : { data: [] },
+        studentIds.length > 0 ? supabase.from("students").select("id, first_name, last_name, class_id").in("id", studentIds) : { data: [] },
         subjectIds.length > 0 ? supabase.from("subjects").select("id, name").in("id", subjectIds) : { data: [] },
         termIds.length > 0 ? supabase.from("terms").select("id, name").in("id", termIds) : { data: [] },
       ]);
@@ -3623,7 +3632,10 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
 
   const gradesUsed = Array.from(new Set(results.map((r: any) => r.grade_letter).filter(Boolean))).sort();
 
+  const hasActiveFilter = filterClass !== "all" || searchQuery.trim() !== "" || filterTerm !== "all";
+
   const filteredResults = results.filter((r: any) => {
+    if (filterClass !== "all" && r.studentData?.class_id !== filterClass) return false;
     const studentName = r.studentData ? `${r.studentData.first_name} ${r.studentData.last_name}` : "";
     const query = searchQuery.trim().toLowerCase();
     if (query && !studentName.toLowerCase().includes(query) && !r.subjectName?.toLowerCase().includes(query)) return false;
@@ -3710,14 +3722,24 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
 
         {/* Search & filters */}
         <div className="bg-card rounded-xl p-4 shadow-card flex flex-wrap gap-3 items-end mb-4">
+          <div className="flex-1 min-w-[160px]">
+            <Label className="text-xs mb-1 block">Class</Label>
+            <Select value={filterClass} onValueChange={setFilterClass}>
+              <SelectTrigger><SelectValue placeholder="Select class..." /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Classes</SelectItem>
+                {(allClasses || []).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex-1 min-w-[200px]">
-            <Label className="text-xs mb-1 block">Search</Label>
+            <Label className="text-xs mb-1 block">Search student or subject</Label>
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search by student or subject..."
+                placeholder="Search by name or subject..."
                 className="pl-8"
               />
             </div>
@@ -3753,63 +3775,69 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
               </SelectContent>
             </Select>
           </div>
-          {(searchQuery || filterTerm !== "all" || filterType !== "all" || filterGrade !== "all") && (
-            <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setSearchQuery(""); setFilterTerm("all"); setFilterType("all"); setFilterGrade("all"); }}>
+          {hasActiveFilter && (
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setSearchQuery(""); setFilterTerm("all"); setFilterType("all"); setFilterGrade("all"); setFilterClass("all"); }}>
               Clear filters
             </Button>
           )}
         </div>
 
-        <div className="bg-card rounded-xl shadow-card overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted">
-              <tr>
-                <th className="text-left p-3 font-medium text-muted-foreground">Student</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Subject</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Score /30</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Grade</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Type</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Term</th>
-                <th className="p-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {filteredResults.map((result: any) => (
-                <tr key={result.id} className="border-t border-border">
-                  <td className="p-3 text-foreground">
-                    {result.studentData ? `${result.studentData.first_name} ${result.studentData.last_name}` : "—"}
-                  </td>
-                  <td className="p-3 text-muted-foreground">{result.subjectName}</td>
-                  <td className="p-3 text-foreground font-semibold">{result.total_score ?? "—"}</td>
-                  <td className="p-3">
-                    <span className={`px-2 py-1 rounded-md text-xs font-bold ${
-                      result.grade_letter?.startsWith("A") ? "bg-purple-100 text-purple-700"
-                      : result.grade_letter?.startsWith("B") ? "bg-green-100 text-green-700"
-                      : result.grade_letter?.startsWith("C") ? "bg-blue-100 text-blue-700"
-                      : result.grade_letter === "D" ? "bg-orange-100 text-orange-700"
-                      : "bg-red-100 text-red-700"
-                    }`}>
-                      {result.grade_letter || "—"}
-                    </span>
-                  </td>
-                  <td className="p-3 text-muted-foreground text-xs capitalize">{result.result_type?.replace("_", " ") || "—"}</td>
-                  <td className="p-3 text-muted-foreground">{result.termName}</td>
-                  <td className="p-3">
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => setEditing({ ...result })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button>
-                      {isSuperAdmin && <button onClick={() => { if (confirm("Delete this result?")) deleteResult.mutate(result.id); }} className="text-destructive hover:opacity-70 transition-opacity"><Trash2 size={14} /></button>}
-                    </div>
-                  </td>
+        {!hasActiveFilter ? (
+          <div className="bg-card rounded-xl shadow-card p-12 text-center">
+            <Search className="mx-auto h-10 w-10 text-muted-foreground/40 mb-3" />
+            <p className="text-muted-foreground font-medium">Select a class or search for a student to view results</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Use the filters above to narrow down results</p>
+          </div>
+        ) : (
+          <div className="bg-card rounded-xl shadow-card overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted">
+                <tr>
+                  <th className="text-left p-3 font-medium text-muted-foreground">Student</th>
+                  <th className="text-left p-3 font-medium text-muted-foreground">Subject</th>
+                  <th className="text-left p-3 font-medium text-muted-foreground">Score /30</th>
+                  <th className="text-left p-3 font-medium text-muted-foreground">Grade</th>
+                  <th className="text-left p-3 font-medium text-muted-foreground">Type</th>
+                  <th className="text-left p-3 font-medium text-muted-foreground">Term</th>
+                  <th className="p-3" />
                 </tr>
-              ))}
-              {!filteredResults.length && (
-                <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">
-                  {results.length ? "No results match your search/filters." : "No results yet."}
-                </td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filteredResults.map((result: any) => (
+                  <tr key={result.id} className="border-t border-border">
+                    <td className="p-3 text-foreground">
+                      {result.studentData ? `${result.studentData.first_name} ${result.studentData.last_name}` : "—"}
+                    </td>
+                    <td className="p-3 text-muted-foreground">{result.subjectName}</td>
+                    <td className="p-3 text-foreground font-semibold">{result.total_score ?? "—"}</td>
+                    <td className="p-3">
+                      <span className={`px-2 py-1 rounded-md text-xs font-bold ${
+                        result.grade_letter?.startsWith("A") ? "bg-purple-100 text-purple-700"
+                        : result.grade_letter?.startsWith("B") ? "bg-green-100 text-green-700"
+                        : result.grade_letter?.startsWith("C") ? "bg-blue-100 text-blue-700"
+                        : result.grade_letter === "D" ? "bg-orange-100 text-orange-700"
+                        : "bg-red-100 text-red-700"
+                      }`}>
+                        {result.grade_letter || "—"}
+                      </span>
+                    </td>
+                    <td className="p-3 text-muted-foreground text-xs capitalize">{result.result_type?.replace("_", " ") || "—"}</td>
+                    <td className="p-3 text-muted-foreground">{result.termName}</td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => setEditing({ ...result })} className="text-muted-foreground hover:text-primary transition-colors"><Pencil size={14} /></button>
+                        {isSuperAdmin && <button onClick={() => { if (confirm("Delete this result?")) deleteResult.mutate(result.id); }} className="text-destructive hover:opacity-70 transition-opacity"><Trash2 size={14} /></button>}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {!filteredResults.length && (
+                  <tr><td colSpan={7} className="p-8 text-center text-muted-foreground">No results match your filters.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -53,8 +53,8 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
         }
       }
 
-      // Get head of school signature — always fetch from the super admin profile
-      const { data: hosProfile } = await supabase.from("profiles").select("signature_url").eq("is_super_admin", true).maybeSingle();
+      // Get head of school signature — fetch from the super admin who has uploaded one
+      const { data: hosProfile } = await supabase.from("profiles").select("signature_url").eq("is_super_admin", true).not("signature_url", "is", null).maybeSingle();
       headOfSchoolSignatureUrl = hosProfile?.signature_url || "";
 
       // Get subject names
