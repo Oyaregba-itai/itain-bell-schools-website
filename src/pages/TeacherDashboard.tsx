@@ -1060,7 +1060,7 @@ export const UploadResults = () => {
   const [selSubject, setSelSubject] = useState("");
   const [selTerm, setSelTerm] = useState("");
   const [selType, setSelType] = useState<"mid_term" | "end_of_term">("mid_term");
-  const [scores, setScores] = useState<Record<string, { score: string; comment: string }>>({});
+  const [scores, setScores] = useState<Record<string, { score: string; comment: string; dnp: boolean }>>({});
   const [saving, setSaving] = useState(false);
 
   const outOf = selType === "mid_term" ? 30 : 70;
@@ -1212,30 +1212,54 @@ export const UploadResults = () => {
     let lastError: string | undefined;
     for (const student of classData.students) {
       const entry = scores[student.id];
-      if (!entry?.score) continue;
-      const scoreVal = parseFloat(entry.score);
-      if (isNaN(scoreVal)) continue;
-      const grade = getGradeForScore(scoreVal, outOf);
+      if (!entry?.score && !entry?.dnp) continue;
       const existing = classData.existingMap[student.id];
       let error;
       try {
-        if (existing) {
-          ({ error } = await supabase.from("results").update({
-            total_score: scoreVal,
-            grade_letter: grade.letter,
-            teacher_comments: entry.comment || null,
-          }).eq("id", existing.id));
+        if (entry.dnp) {
+          if (existing) {
+            ({ error } = await supabase.from("results").update({
+              did_not_participate: true,
+              total_score: null,
+              grade_letter: null,
+              teacher_comments: null,
+            }).eq("id", existing.id));
+          } else {
+            ({ error } = await supabase.from("results").insert({
+              student_id: student.id,
+              subject_id: selectedSubject.id,
+              term_id: selTerm,
+              result_type: selType,
+              did_not_participate: true,
+              total_score: null,
+              grade_letter: null,
+              uploaded_by: user.id,
+            }));
+          }
         } else {
-          ({ error } = await supabase.from("results").insert({
-            student_id: student.id,
-            subject_id: selectedSubject.id,
-            term_id: selTerm,
-            result_type: selType,
-            total_score: scoreVal,
-            grade_letter: grade.letter,
-            teacher_comments: entry.comment || null,
-            uploaded_by: user.id,
-          }));
+          const scoreVal = parseFloat(entry.score);
+          if (isNaN(scoreVal)) continue;
+          const grade = getGradeForScore(scoreVal, outOf);
+          if (existing) {
+            ({ error } = await supabase.from("results").update({
+              did_not_participate: false,
+              total_score: scoreVal,
+              grade_letter: grade.letter,
+              teacher_comments: entry.comment || null,
+            }).eq("id", existing.id));
+          } else {
+            ({ error } = await supabase.from("results").insert({
+              student_id: student.id,
+              subject_id: selectedSubject.id,
+              term_id: selTerm,
+              result_type: selType,
+              did_not_participate: false,
+              total_score: scoreVal,
+              grade_letter: grade.letter,
+              teacher_comments: entry.comment || null,
+              uploaded_by: user.id,
+            }));
+          }
         }
       } catch (e: any) {
         error = e;
@@ -1263,7 +1287,7 @@ export const UploadResults = () => {
     }
   };
 
-  const filledCount = Object.values(scores).filter(s => s.score).length;
+  const filledCount = Object.values(scores).filter(s => s.score || s.dnp).length;
 
   return (
     <div className="space-y-6">
@@ -1379,53 +1403,71 @@ export const UploadResults = () => {
               <tbody>
                 {classData.students.map((student: any) => {
                   const existing = classData.existingMap[student.id];
-                  const entry = scores[student.id] || { score: existing ? String(existing.total_score) : "", comment: existing?.teacher_comments || "" };
+                  const entry = scores[student.id] || { score: existing && !existing.did_not_participate ? String(existing.total_score ?? "") : "", comment: existing?.teacher_comments || "", dnp: existing?.did_not_participate || false };
                   const scoreNum = parseFloat(entry.score) || 0;
-                  const grade = entry.score ? getGradeForScore(scoreNum, outOf) : null;
-                  const isDirty = entry.score && (String(scoreNum) !== String(existing?.total_score ?? "") || entry.comment !== (existing?.teacher_comments ?? ""));
+                  const grade = entry.score && !entry.dnp ? getGradeForScore(scoreNum, outOf) : null;
+                  const isDirty = entry.dnp
+                    ? !existing?.did_not_participate
+                    : entry.score && (String(scoreNum) !== String(existing?.total_score ?? "") || entry.comment !== (existing?.teacher_comments ?? ""));
+                  const toggleDnp = () => setScores(prev => ({ ...prev, [student.id]: { ...entry, dnp: !entry.dnp, score: entry.dnp ? "" : "", comment: "" } }));
                   return (
-                    <tr key={student.id} className={`border-t border-border transition-colors ${isDirty ? "bg-primary/5" : ""}`}>
+                    <tr key={student.id} className={`border-t border-border transition-colors ${entry.dnp ? "bg-muted/40" : isDirty ? "bg-primary/5" : ""}`}>
                       <td className="p-3">
                         <div className="flex items-center gap-2">
                           <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold flex-shrink-0">
                             {student.full_name?.[0]?.toUpperCase()}
                           </div>
-                          <span className="font-medium text-foreground">{student.full_name}</span>
+                          <span className={`font-medium ${entry.dnp ? "text-muted-foreground line-through" : "text-foreground"}`}>{student.full_name}</span>
                         </div>
                       </td>
                       <td className="p-3">
-                        <Input
-                          type="number"
-                          step="0.5"
-                          min="0"
-                          max={outOf}
-                          value={entry.score}
-                          onChange={e => setScores(prev => ({ ...prev, [student.id]: { ...entry, score: e.target.value } }))}
-                          className="h-8 text-sm text-center w-full"
-                          placeholder={`0–${outOf}`}
-                        />
+                        {entry.dnp
+                          ? <span className="text-muted-foreground text-sm italic">—</span>
+                          : <Input
+                              type="number"
+                              step="0.5"
+                              min="0"
+                              max={outOf}
+                              value={entry.score}
+                              onChange={e => setScores(prev => ({ ...prev, [student.id]: { ...entry, score: e.target.value } }))}
+                              className="h-8 text-sm text-center w-full"
+                              placeholder={`0–${outOf}`}
+                            />
+                        }
                       </td>
                       <td className="p-3 text-center">
-                        {grade
-                          ? <span className="text-sm font-bold" style={{ color: grade.color }}>{grade.letter}</span>
-                          : <span className="text-muted-foreground text-xs">—</span>
+                        {entry.dnp
+                          ? <span className="text-xs text-muted-foreground">N/A</span>
+                          : grade
+                            ? <span className="text-sm font-bold" style={{ color: grade.color }}>{grade.letter}</span>
+                            : <span className="text-muted-foreground text-xs">—</span>
                         }
                       </td>
                       <td className="p-3">
-                        <Input
-                          value={entry.comment}
-                          onChange={e => setScores(prev => ({ ...prev, [student.id]: { ...entry, comment: e.target.value } }))}
-                          className="h-8 text-xs"
-                          placeholder="Optional comment..."
-                        />
+                        {!entry.dnp && (
+                          <Input
+                            value={entry.comment}
+                            onChange={e => setScores(prev => ({ ...prev, [student.id]: { ...entry, comment: e.target.value } }))}
+                            className="h-8 text-xs"
+                            placeholder="Optional comment..."
+                          />
+                        )}
                       </td>
                       <td className="p-3 text-center">
-                        {existing && !isDirty
-                          ? <span className="text-xs text-green-600 flex items-center justify-center gap-1"><CheckCircle size={12} /> Saved</span>
-                          : isDirty
-                            ? <span className="text-xs text-amber-600 font-medium">Unsaved</span>
-                            : <span className="text-xs text-muted-foreground">—</span>
-                        }
+                        <div className="flex flex-col items-center gap-1">
+                          <button
+                            onClick={toggleDnp}
+                            className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${entry.dnp ? "bg-amber-100 text-amber-700 border-amber-300" : "text-muted-foreground border-border hover:bg-muted"}`}
+                          >
+                            {entry.dnp ? "DNP ✓" : "DNP"}
+                          </button>
+                          {!entry.dnp && (existing && !isDirty
+                            ? <span className="text-xs text-green-600 flex items-center gap-1"><CheckCircle size={12} /> Saved</span>
+                            : isDirty
+                              ? <span className="text-xs text-amber-600">Unsaved</span>
+                              : null
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

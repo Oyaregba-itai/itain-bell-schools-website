@@ -100,9 +100,10 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
   const handlePrint = () => {
     if (!data) return;
     const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl } = data;
-    const totalObtainable = results.length * 30;
-    const totalObtained = results.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
-    const average = results.length > 0 ? totalObtained / results.length : 0;
+    const scoredResults = results.filter((r: any) => !r.did_not_participate);
+    const totalObtainable = scoredResults.length * 30;
+    const totalObtained = scoredResults.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
+    const average = scoredResults.length > 0 ? totalObtained / scoredResults.length : 0;
     const overallGrade = getGradeInfo(average);
     const studentName = student.full_name || `${student.first_name || ""} ${student.last_name || ""}`.trim();
     const gender = student.gender ? String(student.gender).toUpperCase() : "—";
@@ -116,10 +117,16 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
     const photoUrl = student.avatar_url || "";
 
     const subjectRows = results.map((r: any, i: number) => {
+      const bg = i % 2 === 0 ? "#fff" : "#f8f9fa";
+      if (r.did_not_participate) {
+        return `<tr style="background:${bg}">
+          <td style="padding:5px 8px;border-bottom:1px solid #ddd">${r.subjectName}</td>
+          <td colspan="5" style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:center;color:#888;font-style:italic">Did not take part</td>
+        </tr>`;
+      }
       const score = Number(r.total_score || 0);
       const g = getGradeInfo(score);
       const stats = subjectStats[r.subject_id];
-      const bg = i % 2 === 0 ? "#fff" : "#f8f9fa";
       return `<tr style="background:${bg}">
         <td style="padding:5px 8px;border-bottom:1px solid #ddd">${r.subjectName}</td>
         <td style="padding:5px 6px;border-bottom:1px solid #ddd;text-align:center">${score}</td>
@@ -130,7 +137,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
       </tr>`;
     }).join("");
 
-    const bars = results.map((r: any) => {
+    const bars = scoredResults.map((r: any) => {
       const score = Number(r.total_score || 0);
       const g = getGradeInfo(score);
       const h = Math.max(2, Math.round((score / 30) * 70));
@@ -244,9 +251,10 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
   if (!data) return null;
 
   const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl } = data;
-  const totalObtainable = results.length * 30;
-  const totalObtained = results.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
-  const average = results.length > 0 ? totalObtained / results.length : 0;
+  const scoredResults = results.filter((r: any) => !r.did_not_participate);
+  const totalObtainable = scoredResults.length * 30;
+  const totalObtained = scoredResults.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
+  const average = scoredResults.length > 0 ? totalObtained / scoredResults.length : 0;
   const overallGrade = getGradeInfo(average);
   const studentName = student.full_name || `${student.first_name || ""} ${student.last_name || ""}`.trim();
   const reportLabel = resultType === "mid_term" ? "Mid Term" : "End of Term";
@@ -344,6 +352,14 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
                 </thead>
                 <tbody>
                   {results.map((r: any, i: number) => {
+                    if (r.did_not_participate) {
+                      return (
+                        <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                          <td className="px-2 py-1 border-b border-gray-200">{r.subjectName}</td>
+                          <td colSpan={5} className="px-1 py-1 border-b border-l border-gray-200 text-center text-gray-400 italic text-[9px]">Did not take part</td>
+                        </tr>
+                      );
+                    }
                     const score = Number(r.total_score || 0);
                     const g = getGradeInfo(score);
                     const stats = subjectStats[r.subject_id];
@@ -370,7 +386,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
               <div>
                 <p className="text-[9px] font-bold text-center mb-1">{reportLabel} Total (30)</p>
                 <div className="flex items-end gap-px border-l border-b border-gray-400 h-16 px-0.5">
-                  {results.map((r: any) => {
+                  {scoredResults.map((r: any) => {
                     const score = Number(r.total_score || 0);
                     const g = getGradeInfo(score);
                     const h = Math.max(2, Math.round((score / 30) * 56));
