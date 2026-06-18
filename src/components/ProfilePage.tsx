@@ -110,12 +110,12 @@ const ProfileTab = () => {
   const [saving, setSaving] = useState(false);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>((profile as any)?.profile_picture_url || null);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [signatureUrl, setSignatureUrl] = useState<string | null>((profile as any)?.signature_url || null);
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(profile?.signature_url || null);
   const [uploadingSig, setUploadingSig] = useState(false);
 
   useEffect(() => {
     if ((profile as any)?.profile_picture_url) setProfileImageUrl((profile as any).profile_picture_url);
-    if ((profile as any)?.signature_url) setSignatureUrl((profile as any).signature_url);
+    if (profile?.signature_url) setSignatureUrl(profile.signature_url);
     if (profile?.full_name) setFullName(profile.full_name);
     if ((profile as any)?.phone) setPhone((profile as any).phone);
   }, [profile]);

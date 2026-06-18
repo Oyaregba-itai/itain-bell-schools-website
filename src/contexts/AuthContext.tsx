@@ -11,6 +11,7 @@ interface Profile {
   role: AppRole;
   phone?: string;
   profile_picture_url?: string;
+  signature_url?: string;
   created_at?: string;
   is_super_admin?: boolean;
   is_finance_head?: boolean;
@@ -91,6 +92,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         role: userRole,
         phone: profileData.phone,
         profile_picture_url: profileData.profile_picture_url,
+        signature_url: profileData.signature_url || undefined,
         created_at: profileData.created_at,
         is_super_admin: superAdmin,
         is_finance_head: profileData.is_finance_head === true,
