@@ -22,6 +22,7 @@ import MessagingView from "@/components/MessagingView";
 import ReportCard from "@/components/ReportCard";
 import { MySubjectsView, UploadResults, MyResults } from "@/pages/TeacherDashboard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from "recharts";
+import { compressImage } from "@/lib/imageUtils";
 import { logActivity } from "@/lib/activityLog";
 import { notifyUsers } from "@/lib/notifications";
 
@@ -1727,11 +1728,14 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
     if (!file) return;
     setIsUploadingPhoto(true);
     try {
-      const path = `student-${studentId}-${Date.now()}`;
-      const { error: uploadError } = await supabase.storage.from("profile-pictures").upload(path, file, { upsert: true });
+      const compressed = await compressImage(file, 300, 400, 0.85);
+      // Fixed filename per student — overwrites previous, no accumulation
+      const path = `student-${studentId}`;
+      const { error: uploadError } = await supabase.storage.from("profile-pictures").upload(path, compressed, { upsert: true, contentType: "image/jpeg" });
       if (uploadError) throw uploadError;
       const { data: urlData } = supabase.storage.from("profile-pictures").getPublicUrl(path);
-      const { error: updateError } = await supabase.from("students").update({ avatar_url: urlData.publicUrl }).eq("id", studentId);
+      const url = `${urlData.publicUrl}?v=${Date.now()}`;
+      const { error: updateError } = await supabase.from("students").update({ avatar_url: url }).eq("id", studentId);
       if (updateError) throw updateError;
       queryClient.invalidateQueries({ queryKey: ["student-profile", studentId] });
       queryClient.invalidateQueries({ queryKey: ["all-students"] });

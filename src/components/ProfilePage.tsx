@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { User, Mail, Lock, Upload, Eye, EyeOff, Sun, Moon, Monitor, Bell, BellOff, Shield, Palette, Phone, Plus, Trash2, CheckCircle } from "lucide-react";
+import { compressImage } from "@/lib/imageUtils";
 
 // ── Tiny helpers ─────────────────────────────────────────────────────────────
 
@@ -123,15 +124,17 @@ const ProfileTab = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) return toast({ title: "Please select an image file", variant: "destructive" } as any);
-    if (file.size > 3 * 1024 * 1024) return toast({ title: "Image must be less than 3MB", variant: "destructive" } as any);
     setUploadingSig(true);
     try {
-      const fileName = `signature-${user?.id}-${Date.now()}`;
-      const { error: uploadError } = await supabase.storage.from("profile-pictures").upload(fileName, file, { upsert: true });
+      // Signatures are wide, not tall — max 600×200px, high quality to keep it crisp
+      const compressed = await compressImage(file, 600, 200, 0.9);
+      const fileName = `signature-${user?.id}`;
+      const { error: uploadError } = await supabase.storage.from("profile-pictures").upload(fileName, compressed, { upsert: true, contentType: "image/jpeg" });
       if (uploadError) throw uploadError;
       const { data } = supabase.storage.from("profile-pictures").getPublicUrl(fileName);
-      setSignatureUrl(data.publicUrl);
-      await supabase.from("profiles").update({ signature_url: data.publicUrl }).eq("user_id", user?.id);
+      const url = `${data.publicUrl}?v=${Date.now()}`;
+      setSignatureUrl(url);
+      await supabase.from("profiles").update({ signature_url: url }).eq("user_id", user?.id);
       toast({ title: "Signature saved" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -157,15 +160,18 @@ const ProfileTab = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) return toast({ title: "Please select an image file", variant: "destructive" } as any);
-    if (file.size > 5 * 1024 * 1024) return toast({ title: "Image must be less than 5MB", variant: "destructive" } as any);
     setUploadingImage(true);
     try {
-      const fileName = `profile-${user?.id}-${Date.now()}`;
-      const { error: uploadError } = await supabase.storage.from("profile-pictures").upload(fileName, file, { upsert: true });
+      const compressed = await compressImage(file, 400, 400, 0.85);
+      // Fixed filename — overwrites previous photo, no storage accumulation
+      const fileName = `profile-${user?.id}`;
+      const { error: uploadError } = await supabase.storage.from("profile-pictures").upload(fileName, compressed, { upsert: true, contentType: "image/jpeg" });
       if (uploadError) throw uploadError;
       const { data } = supabase.storage.from("profile-pictures").getPublicUrl(fileName);
-      setProfileImageUrl(data.publicUrl);
-      await supabase.from("profiles").update({ profile_picture_url: data.publicUrl }).eq("user_id", user?.id);
+      // Cache-bust so the browser shows the new image immediately
+      const url = `${data.publicUrl}?v=${Date.now()}`;
+      setProfileImageUrl(url);
+      await supabase.from("profiles").update({ profile_picture_url: url }).eq("user_id", user?.id);
       toast({ title: "Photo updated" });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
