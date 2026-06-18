@@ -109,12 +109,40 @@ const ProfileTab = () => {
   const [saving, setSaving] = useState(false);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>((profile as any)?.profile_picture_url || null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [signatureUrl, setSignatureUrl] = useState<string | null>((profile as any)?.signature_url || null);
+  const [uploadingSig, setUploadingSig] = useState(false);
 
   useEffect(() => {
     if ((profile as any)?.profile_picture_url) setProfileImageUrl((profile as any).profile_picture_url);
+    if ((profile as any)?.signature_url) setSignatureUrl((profile as any).signature_url);
     if (profile?.full_name) setFullName(profile.full_name);
     if ((profile as any)?.phone) setPhone((profile as any).phone);
   }, [profile]);
+
+  const handleSignatureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return toast({ title: "Please select an image file", variant: "destructive" } as any);
+    if (file.size > 3 * 1024 * 1024) return toast({ title: "Image must be less than 3MB", variant: "destructive" } as any);
+    setUploadingSig(true);
+    try {
+      const fileName = `signature-${user?.id}-${Date.now()}`;
+      const { error: uploadError } = await supabase.storage.from("profile-pictures").upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data } = supabase.storage.from("profile-pictures").getPublicUrl(fileName);
+      setSignatureUrl(data.publicUrl);
+      await supabase.from("profiles").update({ signature_url: data.publicUrl }).eq("user_id", user?.id);
+      toast({ title: "Signature saved" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally { setUploadingSig(false); }
+  };
+
+  const removeSignature = async () => {
+    await supabase.from("profiles").update({ signature_url: null }).eq("user_id", user?.id);
+    setSignatureUrl(null);
+    toast({ title: "Signature removed" });
+  };
 
   const saveProfile = async () => {
     if (!fullName.trim()) return toast({ title: "Name cannot be empty", variant: "destructive" } as any);
@@ -170,6 +198,44 @@ const ProfileTab = () => {
             <p className="text-xs text-muted-foreground mt-0.5 capitalize">{(profile as any)?.role} · Member since {profile?.created_at ? new Date(profile.created_at).toLocaleDateString("en-GB", { month: "short", year: "numeric" }) : "—"}</p>
           </div>
         </div>
+      </div>
+
+      {/* Signature */}
+      <div className="bg-card rounded-xl p-6 shadow-card space-y-4">
+        <div>
+          <h3 className="font-heading font-semibold text-foreground">Signature</h3>
+          <p className="text-xs text-muted-foreground mt-1">Your signature will appear on report cards you submit. Upload a clear image on a white background.</p>
+        </div>
+        {signatureUrl ? (
+          <div className="space-y-3">
+            <div className="border border-border rounded-lg p-3 bg-white flex items-center justify-center min-h-[80px]">
+              <img src={signatureUrl} alt="Your signature" className="max-h-20 max-w-full object-contain" />
+            </div>
+            <div className="flex gap-2">
+              <label htmlFor="sig-upload" className="cursor-pointer">
+                <Button type="button" variant="outline" size="sm" className="gap-2 pointer-events-none">
+                  {uploadingSig ? <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" /> : <Upload size={14} />}
+                  {uploadingSig ? "Uploading..." : "Replace"}
+                </Button>
+              </label>
+              <Button type="button" variant="ghost" size="sm" className="gap-2 text-destructive hover:text-destructive" onClick={removeSignature}>
+                <Trash2 size={14} /> Remove
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <label htmlFor="sig-upload" className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl p-6 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors">
+            {uploadingSig
+              ? <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              : <>
+                  <Upload size={24} className="text-muted-foreground mb-2" />
+                  <p className="text-sm font-medium text-foreground">Click to upload signature</p>
+                  <p className="text-xs text-muted-foreground mt-1">PNG, JPG · max 3MB · white background recommended</p>
+                </>
+            }
+          </label>
+        )}
+        <input id="sig-upload" type="file" accept="image/*" onChange={handleSignatureUpload} disabled={uploadingSig} className="hidden" />
       </div>
 
       {/* Personal info */}

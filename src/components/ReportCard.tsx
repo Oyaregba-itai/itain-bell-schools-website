@@ -34,20 +34,29 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
         supabase.from("students").select("*").eq("id", studentId).single(),
         supabase.from("terms").select("*").eq("id", termId).single(),
         supabase.from("results").select("*").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType),
-        supabase.from("report_submissions").select("head_teacher_comment, head_of_school_comment").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType).maybeSingle(),
+        supabase.from("report_submissions").select("head_teacher_comment, head_of_school_comment, approved_by").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType).maybeSingle(),
       ]);
       if (studentRes.error) throw studentRes.error;
 
       // Get class name and head teacher (flat queries — no FK joins)
       let className = "—";
       let headTeacherName = "";
+      let headTeacherSignatureUrl = "";
+      let headOfSchoolSignatureUrl = "";
       if (studentRes.data?.class_id) {
         const { data: cls } = await supabase.from("classes").select("name, head_teacher_id").eq("id", studentRes.data.class_id).single();
         className = cls?.name || "—";
         if (cls?.head_teacher_id) {
-          const { data: headProfile } = await supabase.from("profiles").select("full_name").eq("user_id", cls.head_teacher_id).maybeSingle();
+          const { data: headProfile } = await supabase.from("profiles").select("full_name, signature_url").eq("user_id", cls.head_teacher_id).maybeSingle();
           headTeacherName = headProfile?.full_name || "";
+          headTeacherSignatureUrl = headProfile?.signature_url || "";
         }
+      }
+
+      // Get head of school signature (whoever approved this report)
+      if (submissionRes.data?.approved_by) {
+        const { data: hosProfile } = await supabase.from("profiles").select("signature_url").eq("user_id", submissionRes.data.approved_by).maybeSingle();
+        headOfSchoolSignatureUrl = hosProfile?.signature_url || "";
       }
 
       // Get subject names
@@ -84,13 +93,15 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
         headTeacherComment: submissionRes.data?.head_teacher_comment || "",
         headOfSchoolComment: submissionRes.data?.head_of_school_comment || "",
         headTeacherName,
+        headTeacherSignatureUrl,
+        headOfSchoolSignatureUrl,
       };
     },
   });
 
   const handlePrint = () => {
     if (!data) return;
-    const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName } = data;
+    const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl } = data;
     const totalObtainable = results.length * 30;
     const totalObtained = results.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
     const average = results.length > 0 ? totalObtained / results.length : 0;
@@ -208,13 +219,13 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
       <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Head Teacher Comments</td></tr><tr>
       <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headTeacherComment}</td>
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date: ${today}</td>
-      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Signature:</td></tr><tr>
+      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">${headTeacherSignatureUrl ? `<img src="${headTeacherSignatureUrl}" style="height:28px;max-width:90px;object-fit:contain" alt="signature" />` : "Signature: ___________"}</td></tr><tr>
       <td colspan="3" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Head Teacher:</strong> ${headTeacherName || "—"}</td></tr></table>
     <table style="width:100%;border:2px solid #333;border-top:0"><tr>
       <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Head of School Comments</td></tr><tr>
       <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headOfSchoolComment}</td>
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date: ${today}</td>
-      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Signature:</td></tr><tr>
+      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">${headOfSchoolSignatureUrl ? `<img src="${headOfSchoolSignatureUrl}" style="height:28px;max-width:90px;object-fit:contain" alt="signature" />` : "Signature: ___________"}</td></tr><tr>
       <td colspan="3" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Acting Head of School:</strong> Mrs Goodness Duru</td></tr></table>
     </body></html>`;
 
@@ -234,7 +245,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
 
   if (!data) return null;
 
-  const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName } = data;
+  const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl } = data;
   const totalObtainable = results.length * 30;
   const totalObtained = results.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
   const average = results.length > 0 ? totalObtained / results.length : 0;
@@ -405,7 +416,12 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
             <div className="grid grid-cols-3 divide-x divide-gray-400">
               <div className="col-span-1 px-2 py-2 min-h-[32px]">{headTeacherComment || <span className="text-gray-400 italic">Pending</span>}</div>
               <div className="px-2 py-2">Date: {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>
-              <div className="px-2 py-2">Signature: ___________</div>
+              <div className="px-2 py-2 flex items-center gap-1">
+                Signature:
+                {headTeacherSignatureUrl
+                  ? <img src={headTeacherSignatureUrl} alt="HT signature" className="h-7 max-w-[80px] object-contain ml-1" />
+                  : <span className="text-gray-300 ml-1">___________</span>}
+              </div>
             </div>
             <div className="px-2 py-1.5 border-t border-gray-400">
               <span className="font-semibold">Head Teacher:</span> {headTeacherName || "—"}
@@ -418,7 +434,12 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
             <div className="grid grid-cols-3 divide-x divide-gray-400">
               <div className="col-span-1 px-2 py-2 min-h-[32px]">{headOfSchoolComment || <span className="text-gray-400 italic">Pending</span>}</div>
               <div className="px-2 py-2">Date: {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>
-              <div className="px-2 py-2">Signature: ___________</div>
+              <div className="px-2 py-2 flex items-center gap-1">
+                Signature:
+                {headOfSchoolSignatureUrl
+                  ? <img src={headOfSchoolSignatureUrl} alt="HoS signature" className="h-7 max-w-[80px] object-contain ml-1" />
+                  : <span className="text-gray-300 ml-1">___________</span>}
+              </div>
             </div>
             <div className="px-2 py-1.5 border-t border-gray-400">
               <span className="font-semibold">Acting Head of School:</span> Mrs Goodness Duru
