@@ -140,7 +140,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
       <td style="padding:2px 5px;border:1px solid #ccc;background:${g.color};color:white;text-align:center">&nbsp;</td></tr>`
     ).join("");
 
-    const teacherComment = results[0]?.teacher_comments || "";
+    const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
     const html = `<!DOCTYPE html><html><head><title>${studentName} — ${reportHeader}</title>
     <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:12px}
@@ -205,20 +205,15 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
         <div style="font-size:8px;margin-top:4px;color:#555">N.B: PTE means PROGRESSING TOWARDS EXPECTATION and NME means NOT MEETING EXPECTATION</div>
       </td></tr></table>
     <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
-      <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Teacher Comments</td></tr><tr>
-      <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${teacherComment}</td>
-      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date:</td>
-      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Signature:</td></tr></table>
-    <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
       <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Head Teacher Comments</td></tr><tr>
       <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headTeacherComment}</td>
-      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date:</td>
+      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date: ${today}</td>
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Signature:</td></tr><tr>
       <td colspan="3" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Head Teacher:</strong> ${headTeacherName || "—"}</td></tr></table>
     <table style="width:100%;border:2px solid #333;border-top:0"><tr>
       <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Head of School Comments</td></tr><tr>
       <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headOfSchoolComment}</td>
-      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date:</td>
+      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date: ${today}</td>
       <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Signature:</td></tr><tr>
       <td colspan="3" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Acting Head of School:</strong> Mrs Goodness Duru</td></tr></table>
     </body></html>`;
@@ -404,22 +399,12 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
             </div>
           </div>
 
-          {/* Teacher comment */}
-          <div className="border-2 border-gray-800 border-t-0">
-            <div className="bg-gray-100 px-2 py-1 font-bold border-b border-gray-400">Teacher Comments</div>
-            <div className="grid grid-cols-3 divide-x divide-gray-400">
-              <div className="col-span-1 px-2 py-2 min-h-[32px]">{results[0]?.teacher_comments || ""}</div>
-              <div className="px-2 py-2">Date: ___________</div>
-              <div className="px-2 py-2">Signature: ___________</div>
-            </div>
-          </div>
-
           {/* Head teacher comment */}
           <div className="border-2 border-gray-800 border-t-0">
             <div className="bg-gray-100 px-2 py-1 font-bold border-b border-gray-400">Head Teacher Comments</div>
             <div className="grid grid-cols-3 divide-x divide-gray-400">
               <div className="col-span-1 px-2 py-2 min-h-[32px]">{headTeacherComment || <span className="text-gray-400 italic">Pending</span>}</div>
-              <div className="px-2 py-2">Date: ___________</div>
+              <div className="px-2 py-2">Date: {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>
               <div className="px-2 py-2">Signature: ___________</div>
             </div>
             <div className="px-2 py-1.5 border-t border-gray-400">
@@ -432,7 +417,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
             <div className="bg-gray-100 px-2 py-1 font-bold border-b border-gray-400">Head of School Comments</div>
             <div className="grid grid-cols-3 divide-x divide-gray-400">
               <div className="col-span-1 px-2 py-2 min-h-[32px]">{headOfSchoolComment || <span className="text-gray-400 italic">Pending</span>}</div>
-              <div className="px-2 py-2">Date: ___________</div>
+              <div className="px-2 py-2">Date: {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>
               <div className="px-2 py-2">Signature: ___________</div>
             </div>
             <div className="px-2 py-1.5 border-t border-gray-400">
