@@ -64,7 +64,7 @@ const AdminDashboard = () => {
           { id: "my-results", label: "My Results", icon: BarChart3 },
         ]
       : []),
-    ...(isSuperAdmin ? [{ id: "activity", label: "User Activity", icon: History }] : []),
+    ...(isSuperAdmin ? [{ id: "submitted-results", label: "Submitted Results", icon: Send }, { id: "activity", label: "User Activity", icon: History }] : []),
   ];
 
   return (
@@ -79,7 +79,7 @@ const AdminDashboard = () => {
       {activeTab === "admissions" && <ManageAdmissions />}
       {activeTab === "events" && <ManageEvents />}
       {activeTab === "results" && <ViewAllResults isSuperAdmin={isSuperAdmin} />}
-      {activeTab === "submitted-results" && <SubmittedReportCards />}
+      {activeTab === "submitted-results" && isSuperAdmin && <SubmittedReportCards />}
       {activeTab === "requests" && <RequestsPanel />}
       {activeTab === "finances" && <FinancesView />}
       {activeTab === "announcements" && <AnnouncementsView />}
@@ -3337,13 +3337,14 @@ const SearchableCombobox = ({
 };
 
 const LiveReportCardPreview = ({
-  studentsWithResults, termsWithResults, allResults, onEditResult, onResultSaved,
+  studentsWithResults, termsWithResults, allResults, onEditResult, onResultSaved, isSuperAdmin,
 }: {
   studentsWithResults: { id: string; name: string }[];
   termsWithResults: { id: string; name: string }[];
   allResults: any[];
   onEditResult: (result: any) => void;
   onResultSaved: () => void;
+  isSuperAdmin: boolean;
 }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -3500,19 +3501,21 @@ const LiveReportCardPreview = ({
               ))}
             </div>
 
-            <div className="border-t border-border pt-3 space-y-2">
-              <h4 className="font-heading font-semibold text-foreground text-sm">Head of School Comment</h4>
-              <Textarea
-                value={schoolHeadComment}
-                onChange={e => setSchoolHeadComment(e.target.value)}
-                placeholder="Write the Head of School's comment on this student's overall performance..."
-                rows={3}
-                className="text-sm"
-              />
-              <Button size="sm" className="hero-gradient" onClick={() => saveSchoolHeadComment.mutate()} disabled={saveSchoolHeadComment.isPending}>
-                {saveSchoolHeadComment.isPending ? "Saving..." : "Save Comment"}
-              </Button>
-            </div>
+            {isSuperAdmin && (
+              <div className="border-t border-border pt-3 space-y-2">
+                <h4 className="font-heading font-semibold text-foreground text-sm">Head of School Comment</h4>
+                <Textarea
+                  value={schoolHeadComment}
+                  onChange={e => setSchoolHeadComment(e.target.value)}
+                  placeholder="Write the Head of School's comment on this student's overall performance..."
+                  rows={3}
+                  className="text-sm"
+                />
+                <Button size="sm" className="hero-gradient" onClick={() => saveSchoolHeadComment.mutate()} disabled={saveSchoolHeadComment.isPending}>
+                  {saveSchoolHeadComment.isPending ? "Saving..." : "Save Comment"}
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -3677,6 +3680,7 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
         allResults={results}
         onEditResult={setEditing}
         onResultSaved={() => queryClient.invalidateQueries({ queryKey: ["all-results-admin"] })}
+        isSuperAdmin={isSuperAdmin}
       />
 
       {/* ── Detailed results table ── */}

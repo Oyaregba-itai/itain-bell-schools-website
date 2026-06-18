@@ -53,11 +53,9 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
         }
       }
 
-      // Get head of school signature (whoever approved this report)
-      if (submissionRes.data?.approved_by) {
-        const { data: hosProfile } = await supabase.from("profiles").select("signature_url").eq("user_id", submissionRes.data.approved_by).maybeSingle();
-        headOfSchoolSignatureUrl = hosProfile?.signature_url || "";
-      }
+      // Get head of school signature — always fetch from the super admin profile
+      const { data: hosProfile } = await supabase.from("profiles").select("signature_url").eq("is_super_admin", true).maybeSingle();
+      headOfSchoolSignatureUrl = hosProfile?.signature_url || "";
 
       // Get subject names
       const results = resultsRes.data || [];
