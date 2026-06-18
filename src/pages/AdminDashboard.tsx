@@ -319,7 +319,7 @@ const AdminOverview = () => {
       {(pendingUploadRequests ?? 0) > 0 && (
         <div className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 text-sm text-purple-700">
           <ClipboardCheck size={16} className="flex-shrink-0" />
-          <span><strong>{pendingUploadRequests} score upload request{pendingUploadRequests !== 1 ? "s" : ""}</strong> from head teachers awaiting your approval. Go to <strong>Requests</strong> to review.</span>
+          <span><strong>{pendingUploadRequests} score upload request{pendingUploadRequests !== 1 ? "s" : ""}</strong> from class teachers awaiting your approval. Go to <strong>Requests</strong> to review.</span>
         </div>
       )}
 
@@ -1125,7 +1125,7 @@ const ClassDetail = ({ cls, onBack }: { cls: any; onBack: () => void }) => {
         {headTeacherName && (
           <div className="flex items-center gap-2 mt-1">
             <span className="text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full font-medium">
-              Head of Class: {headTeacherName}
+              Class Teacher: {headTeacherName}
             </span>
           </div>
         )}
@@ -1354,7 +1354,7 @@ const ClassList = ({ onView }: { onView: (cls: any) => void }) => {
           <thead className="bg-muted">
             <tr>
               <th className="text-left p-3 font-medium text-muted-foreground">Name</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Head of Class</th>
+              <th className="text-left p-3 font-medium text-muted-foreground">Class Teacher</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Description</th>
               <th className="p-3" />
             </tr>
@@ -1893,7 +1893,7 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
               ["Admission Number", (student as any).admission_number || "—"],
               ["Student ID", (student as any).student_id || "—"],
               ["Class", (student as any).className || "—"],
-              ["Head of Class", (student as any).headTeacherName || "—"],
+              ["Class Teacher", (student as any).headTeacherName || "—"],
               ["Results on Record", `${results.length} entries`],
             ].map(([label, value]) => (
               <div key={label as string} className="flex justify-between border-b border-border pb-2 last:border-0">
@@ -3081,7 +3081,7 @@ const ScoreUploadRequestsPanel = () => {
         <table className="w-full text-sm">
           <thead className="bg-muted">
             <tr>
-              <th className="text-left p-3 font-medium text-muted-foreground">Head Teacher</th>
+              <th className="text-left p-3 font-medium text-muted-foreground">Class Teacher</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Class</th>
               <th className="text-left p-3 font-medium text-muted-foreground">Subject</th>
               <th className="p-3" />
@@ -3209,7 +3209,7 @@ const SubmittedReportCards = () => {
     <div className="space-y-4">
       <div>
         <h3 className="text-lg font-heading text-foreground">Submitted Results</h3>
-        <p className="text-sm text-muted-foreground">Report cards submitted by class head teachers, awaiting your review and upload.</p>
+        <p className="text-sm text-muted-foreground">Report cards submitted by class teachers, awaiting your review and upload.</p>
       </div>
 
       {!submissions?.length ? (
@@ -3225,7 +3225,7 @@ const SubmittedReportCards = () => {
                 <th className="text-left p-3 font-medium text-muted-foreground">Term</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">Type</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">Submitted by</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Head Teacher Comment</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Class Teacher Comment</th>
                 <th className="p-3" />
               </tr>
             </thead>

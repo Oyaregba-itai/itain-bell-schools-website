@@ -221,7 +221,7 @@ const TeacherOverview = ({ onTabChange }: { onTabChange: (tab: string) => void }
               <p className="text-lg font-heading">{greeting()}, {displayName}!</p>
               <p className="text-sm opacity-80">
                 {overview?.headClasses?.length
-                  ? `Head of Class — ${overview.headClasses.map((c: any) => c.name).join(", ")}`
+                  ? `Class Teacher — ${overview.headClasses.map((c: any) => c.name).join(", ")}`
                   : "Welcome to your teacher portal"}
               </p>
             </div>
@@ -628,7 +628,7 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
 
               {/* Head teacher comment */}
               <div>
-                <Label className="text-sm font-medium">Your Comment (Head Teacher)</Label>
+                <Label className="text-sm font-medium">Your Comment (Class Teacher)</Label>
                 <Textarea
                   value={headComment}
                   onChange={e => setHeadComment(e.target.value)}
@@ -915,7 +915,7 @@ const MyClassView = ({ headClasses }: { headClasses: any[] }) => {
           </div>
           <div>
             <h2 className="text-2xl font-heading">{className}</h2>
-            <p className="opacity-80 text-sm">{students.length} students · {totalSubjects} subjects · Head of Class</p>
+            <p className="opacity-80 text-sm">{students.length} students · {totalSubjects} subjects · Class Teacher</p>
           </div>
         </div>
       </div>
@@ -1157,7 +1157,7 @@ export const UploadResults = () => {
           adminIds,
           "request",
           "New score upload request",
-          `${requesterProfile?.full_name || "A head teacher"} requested access for ${className || ""} / ${subjectName || ""}`,
+          `${requesterProfile?.full_name || "A class teacher"} requested access for ${className || ""} / ${subjectName || ""}`,
           "requests"
         );
       } catch { /* silent fail */ }
