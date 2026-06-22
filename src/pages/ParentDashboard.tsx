@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
-import { GraduationCap, Printer } from "lucide-react";
+import { GraduationCap, Printer, Download, ChevronLeft, User, BookOpen, Hash } from "lucide-react";
 
 const getHour = () => new Date().getHours();
 const greeting = () => getHour() < 12 ? "Good morning" : getHour() < 17 ? "Good afternoon" : "Good evening";
@@ -35,16 +35,101 @@ const ParentDashboard = () => {
   );
 };
 
+const ChildProfile = ({ child, className, onBack }: { child: any; className: string; onBack: () => void }) => {
+  const dob = child.date_of_birth ? new Date(child.date_of_birth) : null;
+  const age = dob ? `${new Date().getFullYear() - dob.getFullYear()} yrs` : null;
+
+  return (
+    <div className="space-y-6">
+      <button onClick={onBack} className="flex items-center gap-2 text-muted-foreground hover:text-foreground text-sm transition-colors">
+        <ChevronLeft size={18} /> Back
+      </button>
+      <div className="bg-card rounded-xl p-6 shadow-card flex items-center gap-5">
+        <div className="w-20 h-20 rounded-full flex-shrink-0 overflow-hidden">
+          {child.avatar_url
+            ? <img src={child.avatar_url} className="w-full h-full object-cover" alt="" />
+            : <div className="w-full h-full green-gradient flex items-center justify-center">
+                <GraduationCap className="text-primary-foreground" size={32} />
+              </div>
+          }
+        </div>
+        <div>
+          <h2 className="text-xl font-heading font-bold text-foreground">{child.full_name || `${child.first_name} ${child.last_name}`}</h2>
+          <p className="text-sm text-muted-foreground mt-1">{className || "No class assigned"}</p>
+        </div>
+      </div>
+
+      <div className="bg-card rounded-xl p-6 shadow-card space-y-4">
+        <h3 className="font-heading font-semibold text-foreground">Student Information</h3>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          {child.student_id && (
+            <div className="flex items-start gap-2">
+              <Hash size={15} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-muted-foreground text-xs">Student ID</p>
+                <p className="font-medium text-foreground">{child.student_id}</p>
+              </div>
+            </div>
+          )}
+          {child.admission_number && (
+            <div className="flex items-start gap-2">
+              <Hash size={15} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-muted-foreground text-xs">Admission No.</p>
+                <p className="font-medium text-foreground">{child.admission_number}</p>
+              </div>
+            </div>
+          )}
+          {child.gender && (
+            <div className="flex items-start gap-2">
+              <User size={15} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-muted-foreground text-xs">Gender</p>
+                <p className="font-medium text-foreground capitalize">{child.gender}</p>
+              </div>
+            </div>
+          )}
+          {age && (
+            <div className="flex items-start gap-2">
+              <User size={15} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-muted-foreground text-xs">Age</p>
+                <p className="font-medium text-foreground">{age}</p>
+              </div>
+            </div>
+          )}
+          <div className="flex items-start gap-2">
+            <BookOpen size={15} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-muted-foreground text-xs">Class</p>
+              <p className="font-medium text-foreground">{className || "—"}</p>
+            </div>
+          </div>
+          {child.school_section && (
+            <div className="flex items-start gap-2">
+              <BookOpen size={15} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-muted-foreground text-xs">Section</p>
+                <p className="font-medium text-foreground capitalize">{child.school_section}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ParentOverview = () => {
   const { user, profile } = useAuth();
   const firstName = extractFirstName(profile?.full_name);
+  const [viewingChild, setViewingChild] = useState<any>(null);
 
   const { data: allData } = useQuery({
     queryKey: ["my-children", user?.id],
     queryFn: async () => {
       if (!user?.id) return { children: [], classesMap: new Map() };
 
-      // Get student IDs linked to this parent
       const { data: links, error: linksError } = await supabase
         .from("parent_students")
         .select("student_id")
@@ -56,7 +141,7 @@ const ParentOverview = () => {
 
       const [studentsRes, classesRes] = await Promise.all([
         studentIds.length > 0
-          ? supabase.from("students").select("id, first_name, last_name, student_id, class_id").in("id", studentIds)
+          ? supabase.from("students").select("id, first_name, last_name, full_name, student_id, admission_number, class_id, gender, date_of_birth, school_section, avatar_url").in("id", studentIds)
           : Promise.resolve({ data: [] as any[], error: null }),
         supabase.from("classes").select("*"),
       ]);
@@ -66,10 +151,7 @@ const ParentOverview = () => {
       const classesMap = new Map();
       (classesRes.data || []).forEach((cls: any) => classesMap.set(cls.id, cls));
 
-      return {
-        children: studentsRes.data || [],
-        classesMap,
-      };
+      return { children: studentsRes.data || [], classesMap };
     },
     enabled: !!user,
   });
@@ -77,9 +159,13 @@ const ParentOverview = () => {
   const children = allData?.children || [];
   const classesMap = allData?.classesMap || new Map();
 
+  if (viewingChild) {
+    const className = classesMap.get(viewingChild.class_id)?.name || "";
+    return <ChildProfile child={viewingChild} className={className} onBack={() => setViewingChild(null)} />;
+  }
+
   return (
     <div className="space-y-6">
-      {/* Welcome banner */}
       <div className="hero-gradient rounded-xl p-5 shadow-card flex items-center gap-4 text-primary-foreground">
         <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0">
           {profile?.profile_picture_url
@@ -98,23 +184,29 @@ const ParentOverview = () => {
         {children?.map((child: any) => {
           const className = classesMap.get(child?.class_id)?.name;
           return (
-            <div key={child?.id} className="bg-card rounded-xl p-5 shadow-card flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full green-gradient flex items-center justify-center">
-                <GraduationCap className="text-primary-foreground" size={22} />
+            <button
+              key={child?.id}
+              onClick={() => setViewingChild(child)}
+              className="bg-card rounded-xl p-5 shadow-card flex items-center gap-4 text-left hover:shadow-md transition-shadow w-full"
+            >
+              <div className="w-12 h-12 rounded-full flex-shrink-0 overflow-hidden">
+                {child.avatar_url
+                  ? <img src={child.avatar_url} className="w-full h-full object-cover" alt="" />
+                  : <div className="w-full h-full green-gradient flex items-center justify-center">
+                      <GraduationCap className="text-primary-foreground" size={22} />
+                    </div>
+                }
               </div>
-              <div>
-                <div className="font-medium text-foreground">
-                  {child?.first_name} {child?.last_name}
-                </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-foreground">{child?.first_name} {child?.last_name}</div>
                 <div className="text-sm text-muted-foreground">{className || "No class assigned"}</div>
               </div>
-            </div>
+              <ChevronLeft size={16} className="text-muted-foreground rotate-180 flex-shrink-0" />
+            </button>
           );
         })}
         {(!children || children.length === 0) && (
-          <p className="text-muted-foreground text-sm">
-            No children linked to your account yet. Contact the administrator.
-          </p>
+          <p className="text-muted-foreground text-sm">No children linked to your account yet. Contact the administrator.</p>
         )}
       </div>
     </div>
@@ -123,7 +215,7 @@ const ParentOverview = () => {
 
 const ChildrenResults = () => {
   const { user } = useAuth();
-  const [reportCard, setReportCard] = useState<{ studentId: string; termId: string; resultType: "mid_term" | "end_of_term" } | null>(null);
+  const [reportCard, setReportCard] = useState<{ studentId: string; termId: string; resultType: "mid_term" | "end_of_term"; autoPrint?: boolean } | null>(null);
 
   const { data: children } = useQuery({
     queryKey: ["my-children-ids", user?.id],
@@ -193,6 +285,7 @@ const ChildrenResults = () => {
           studentId={reportCard.studentId}
           termId={reportCard.termId}
           resultType={reportCard.resultType}
+          autoPrint={reportCard.autoPrint}
           onClose={() => setReportCard(null)}
         />
       )}
@@ -221,21 +314,26 @@ const ChildrenResults = () => {
               {byTerm.map((sub: any) => {
                 const term = termsMap.get(sub.term_id);
                 return (
-                  <div key={`${sub.term_id}`} className="border border-border rounded-xl p-4 space-y-3">
+                  <div key={sub.term_id} className="border border-border rounded-xl p-4 space-y-3">
                     <p className="text-sm font-medium text-foreground">{term?.name || "—"}</p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setReportCard({ studentId: student.id, termId: sub.term_id, resultType: "mid_term" })}
-                        className="flex-1 flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
-                      >
-                        <Printer size={12} /> Mid Term
-                      </button>
-                      <button
-                        onClick={() => setReportCard({ studentId: student.id, termId: sub.term_id, resultType: "end_of_term" })}
-                        className="flex-1 flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-secondary/10 text-secondary hover:bg-secondary/20 transition-colors font-medium"
-                      >
-                        <Printer size={12} /> End of Term
-                      </button>
+                    <div className="space-y-2">
+                      {(["mid_term", "end_of_term"] as const).map((type) => (
+                        <div key={type} className="flex gap-1.5">
+                          <button
+                            onClick={() => setReportCard({ studentId: student.id, termId: sub.term_id, resultType: type })}
+                            className="flex-1 flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
+                          >
+                            <Printer size={12} /> {type === "mid_term" ? "Mid Term" : "End of Term"}
+                          </button>
+                          <button
+                            onClick={() => setReportCard({ studentId: student.id, termId: sub.term_id, resultType: type, autoPrint: true })}
+                            className="flex items-center justify-center gap-1 text-xs px-2.5 py-2 rounded-lg bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                            title="Download PDF"
+                          >
+                            <Download size={13} />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 );

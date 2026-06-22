@@ -1957,36 +1957,6 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
         )}
       </div>}
 
-      {/* Recent results — hidden for creche */}
-      {(student as any).school_section !== "creche" && results.length > 0 && (
-        <div className="bg-card rounded-xl p-5 shadow-card">
-          <h4 className="font-heading text-foreground font-semibold mb-4">Results</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted">
-                <tr>
-                  <th className="text-left p-2 font-medium text-muted-foreground">Subject</th>
-                  <th className="text-center p-2 font-medium text-muted-foreground">Score /30</th>
-                  <th className="text-center p-2 font-medium text-muted-foreground">Grade</th>
-                  <th className="text-left p-2 font-medium text-muted-foreground">Type</th>
-                  <th className="text-left p-2 font-medium text-muted-foreground">Term</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.map((r: any) => (
-                  <tr key={r.id} className="border-t border-border">
-                    <td className="p-2 font-medium">{r.subjectName}</td>
-                    <td className="p-2 text-center font-semibold">{r.total_score ?? "—"}</td>
-                    <td className="p-2 text-center font-bold text-primary">{r.grade_letter || "—"}</td>
-                    <td className="p-2 text-muted-foreground capitalize text-xs">{r.result_type?.replace("_", " ") || "—"}</td>
-                    <td className="p-2 text-muted-foreground text-xs">{r.termName}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* Edit Student Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>

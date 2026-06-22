@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Printer, X } from "lucide-react";
@@ -10,6 +11,7 @@ interface ReportCardProps {
   resultType: "mid_term" | "end_of_term";
   onClose?: () => void;
   inline?: boolean;
+  autoPrint?: boolean;
 }
 
 const GRADE_SCALE = [
@@ -26,7 +28,8 @@ const GRADE_SCALE = [
 const getGradeInfo = (score: number) =>
   GRADE_SCALE.find((g) => score >= g.min && score <= g.max) || GRADE_SCALE[GRADE_SCALE.length - 1];
 
-const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCardProps) => {
+const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint }: ReportCardProps) => {
+  const autoPrinted = useRef(false);
   const { data, isLoading } = useQuery({
     queryKey: ["report-card", studentId, termId, resultType],
     queryFn: async () => {
@@ -321,6 +324,14 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
     win.focus();
     setTimeout(() => win.print(), 500);
   };
+
+  // Auto-trigger print once data is ready (used by parent download button)
+  useEffect(() => {
+    if (autoPrint && data && !autoPrinted.current) {
+      autoPrinted.current = true;
+      setTimeout(handlePrint, 300);
+    }
+  }, [autoPrint, data]);
 
   if (isLoading) return (
     <div className={inline ? "flex items-center justify-center py-20" : "fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center"}>
