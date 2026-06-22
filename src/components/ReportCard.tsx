@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Printer, X } from "lucide-react";
+import { Printer, X, Download } from "lucide-react";
 import schoolLogo from "@/assets/school-logo.png";
 
 interface ReportCardProps {
@@ -30,6 +30,8 @@ const getGradeInfo = (score: number) =>
 
 const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint }: ReportCardProps) => {
   const autoPrinted = useRef(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ["report-card", studentId, termId, resultType],
     queryFn: async () => {
@@ -105,6 +107,38 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
       };
     },
   });
+
+  const handleDownload = async () => {
+    if (!contentRef.current || !data) return;
+    setDownloading(true);
+    try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+      const canvas = await html2canvas(contentRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgRatio = canvas.width / canvas.height;
+      let w = pageW;
+      let h = pageW / imgRatio;
+      if (h > pageH) { h = pageH; w = pageH * imgRatio; }
+      pdf.addImage(imgData, "PNG", (pageW - w) / 2, 0, w, h);
+      const studentName = (data as any).student?.full_name || "student";
+      const termName = (data as any).term?.name || "term";
+      const label = resultType === "mid_term" ? "Mid_Term" : "End_of_Term";
+      pdf.save(`${studentName}_${termName}_${label}.pdf`.replace(/\s+/g, "_"));
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const handlePrint = () => {
     if (!data) return;
@@ -325,11 +359,11 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
     setTimeout(() => win.print(), 500);
   };
 
-  // Auto-trigger print once data is ready (used by parent download button)
+  // Auto-trigger download once data + DOM are ready (used by parent download button)
   useEffect(() => {
     if (autoPrint && data && !autoPrinted.current) {
       autoPrinted.current = true;
-      setTimeout(handlePrint, 300);
+      setTimeout(handleDownload, 600);
     }
   }, [autoPrint, data]);
 
@@ -361,15 +395,16 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
           <p className="text-xs text-gray-500">{(term as any)?.name} · {reportLabel} Report Card · {(term as any)?.academic_year}</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={handlePrint} className="hero-gradient gap-2 text-sm">
-            <Printer size={15} /> Print / Download PDF
+          <Button onClick={handleDownload} disabled={downloading} className="hero-gradient gap-2 text-sm">
+            <Download size={15} /> {downloading ? "Saving…" : "Download PDF"}
           </Button>
+          <Button onClick={handlePrint} variant="outline" size="icon" title="Print"><Printer size={15} /></Button>
           {!inline && onClose && <Button variant="outline" size="icon" onClick={onClose}><X size={16} /></Button>}
         </div>
       </div>
 
         {/* Report card preview — styled to match PDF */}
-        <div className="p-5 space-y-0 text-[11px] font-sans text-gray-900" style={{ fontFamily: "Arial, sans-serif" }}>
+        <div ref={contentRef} className="p-5 space-y-0 text-[11px] font-sans text-gray-900" style={{ fontFamily: "Arial, sans-serif" }}>
 
           {/* School header */}
           <div className="border-2 border-gray-800">
