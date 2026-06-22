@@ -44,26 +44,30 @@ const ParentOverview = () => {
     queryFn: async () => {
       if (!user?.id) return { children: [], classesMap: new Map() };
 
-      // Get students linked to this parent
-      const { data: childrenData, error: childrenError } = await supabase
+      // Get student IDs linked to this parent
+      const { data: links, error: linksError } = await supabase
         .from("parent_students")
-        .select("student_id, students:student_id(id, first_name, last_name, student_id, class_id)")
+        .select("student_id")
         .eq("parent_id", user.id);
 
-      if (childrenError) throw childrenError;
+      if (linksError) throw linksError;
 
-      // Get all classes
-      const { data: classesData, error: classesError } = await supabase
-        .from("classes")
-        .select("*");
+      const studentIds = (links || []).map((l: any) => l.student_id).filter(Boolean);
 
-      if (classesError) throw classesError;
+      const [studentsRes, classesRes] = await Promise.all([
+        studentIds.length > 0
+          ? supabase.from("students").select("id, first_name, last_name, student_id, class_id").in("id", studentIds)
+          : Promise.resolve({ data: [] as any[], error: null }),
+        supabase.from("classes").select("*"),
+      ]);
+
+      if (classesRes.error) throw classesRes.error;
 
       const classesMap = new Map();
-      classesData?.forEach((cls) => classesMap.set(cls.id, cls));
+      (classesRes.data || []).forEach((cls: any) => classesMap.set(cls.id, cls));
 
       return {
-        children: childrenData?.map((rel) => rel.students) || [],
+        children: studentsRes.data || [],
         classesMap,
       };
     },
@@ -126,13 +130,16 @@ const ChildrenResults = () => {
     queryFn: async () => {
       if (!user?.id) return [];
 
-      const { data, error } = await supabase
+      const { data: links, error } = await supabase
         .from("parent_students")
-        .select("student_id, students:student_id(id)")
+        .select("student_id")
         .eq("parent_id", user.id);
 
       if (error) throw error;
-      return data?.map((rel) => rel.students) || [];
+      const ids = (links || []).map((l: any) => l.student_id).filter(Boolean);
+      if (!ids.length) return [];
+      const { data: students } = await supabase.from("students").select("id").in("id", ids);
+      return students || [];
     },
     enabled: !!user,
   });
