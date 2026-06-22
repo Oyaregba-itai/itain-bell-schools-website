@@ -43,10 +43,11 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline }: ReportCa
       let headTeacherName = "";
       let headTeacherSignatureUrl = "";
       let headOfSchoolSignatureUrl = "";
+      let isCommentMode = false;
       if (studentRes.data?.class_id) {
         const { data: cls } = await supabase.from("classes").select("name, head_teacher_id, report_format").eq("id", studentRes.data.class_id).single();
         className = cls?.name || "—";
-        const isCommentMode = cls?.report_format === "comment";
+        isCommentMode = cls?.report_format === "comment";
         if (cls?.head_teacher_id) {
           const { data: headProfile } = await supabase.from("profiles").select("full_name, signature_url").eq("user_id", cls.head_teacher_id).maybeSingle();
           headTeacherName = headProfile?.full_name || "";
