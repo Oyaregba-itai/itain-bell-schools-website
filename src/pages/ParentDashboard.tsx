@@ -47,13 +47,7 @@ const ParentOverview = () => {
       // Get students linked to this parent
       const { data: childrenData, error: childrenError } = await supabase
         .from("parent_students")
-        .select(
-          `
-          student_id,
-          students:student_id(id, first_name, last_name, student_id, class_id),
-          classes:students(class_id)
-        `
-        )
+        .select("student_id, students:student_id(id, first_name, last_name, student_id, class_id)")
         .eq("parent_id", user.id);
 
       if (childrenError) throw childrenError;
