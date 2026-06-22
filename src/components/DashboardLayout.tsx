@@ -107,7 +107,6 @@ const DashboardLayout = ({ children, activeTab, onTabChange, extraTabs = [], tab
     { id: "timetable", label: "Timetable", icon: Clock },
     { id: "events", label: "Events", icon: Calendar },
     { id: "announcements", label: "Announcements", icon: Megaphone },
-    { id: "messaging", label: "Messages", icon: MessageCircle },
   ];
 
   const baseTabs = role === "admin" ? adminTabs : role === "teacher" ? teacherTabs : parentTabs;

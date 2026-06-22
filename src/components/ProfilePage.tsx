@@ -103,7 +103,7 @@ const ProfilePage = () => {
 // ── Profile tab ────────────────────────────────────────────────────────────────
 
 const ProfileTab = () => {
-  const { user, profile } = useAuth();
+  const { user, profile, role } = useAuth();
   const { toast } = useToast();
   const [fullName, setFullName] = useState(profile?.full_name || "");
   const [phone, setPhone] = useState((profile as any)?.phone || "");
@@ -206,8 +206,8 @@ const ProfileTab = () => {
         </div>
       </div>
 
-      {/* Signature */}
-      <div className="bg-card rounded-xl p-6 shadow-card space-y-4">
+      {/* Signature — only for staff, not parents */}
+      {role !== "parent" && <div className="bg-card rounded-xl p-6 shadow-card space-y-4">
         <div>
           <h3 className="font-heading font-semibold text-foreground">Signature</h3>
           <p className="text-xs text-muted-foreground mt-1">Your signature will appear on report cards you submit. Upload a clear image on a white background.</p>
@@ -242,7 +242,7 @@ const ProfileTab = () => {
           </label>
         )}
         <input id="sig-upload" type="file" accept="image/*" onChange={handleSignatureUpload} disabled={uploadingSig} className="hidden" />
-      </div>
+      </div>}
 
       {/* Personal info */}
       <div className="bg-card rounded-xl p-6 shadow-card space-y-4">

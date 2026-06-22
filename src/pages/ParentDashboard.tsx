@@ -126,7 +126,7 @@ const ChildrenResults = () => {
   const [reportCard, setReportCard] = useState<{ studentId: string; termId: string; resultType: "mid_term" | "end_of_term" } | null>(null);
 
   const { data: children } = useQuery({
-    queryKey: ["my-children", user?.id],
+    queryKey: ["my-children-ids", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
 
