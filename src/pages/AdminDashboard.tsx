@@ -47,11 +47,12 @@ const AdminDashboard = () => {
   const { data: pendingCounts } = useQuery({
     queryKey: ["admin-pending-results-count"],
     queryFn: async () => {
-      const [subsRes, reqsRes] = await Promise.all([
+      const [subsRes, reqsRes, appsRes] = await Promise.all([
         supabase.from("report_submissions").select("id", { count: "exact" }).eq("status", "submitted"),
         supabase.from("score_upload_requests").select("id", { count: "exact" }).eq("status", "pending"),
+        supabase.from("admission_applications").select("id", { count: "exact" }).eq("status", "pending"),
       ]);
-      return { submissions: subsRes.count || 0, requests: reqsRes.count || 0 };
+      return { submissions: subsRes.count || 0, requests: reqsRes.count || 0, applications: appsRes.count || 0 };
     },
   });
 
@@ -68,7 +69,7 @@ const AdminDashboard = () => {
   ];
 
   return (
-    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} extraTabs={extraTabs} tabBadges={{ requests: pendingCounts?.requests || 0, "submitted-results": pendingCounts?.submissions || 0 }}>
+    <DashboardLayout activeTab={activeTab} onTabChange={setActiveTab} extraTabs={extraTabs} tabBadges={{ requests: pendingCounts?.requests || 0, "submitted-results": pendingCounts?.submissions || 0, admissions: pendingCounts?.applications || 0 }}>
       {activeTab === "overview" && <AdminOverview />}
       {activeTab === "profile" && <ProfilePage />}
       {activeTab === "users" && <ManageUsers />}
@@ -235,6 +236,14 @@ const AdminOverview = () => {
     },
   });
 
+  const { data: pendingApplications } = useQuery({
+    queryKey: ["pending-applications-count"],
+    queryFn: async () => {
+      const { count } = await supabase.from("admission_applications").select("id", { count: "exact" }).eq("status", "pending");
+      return count || 0;
+    },
+  });
+
   const { data: upcomingEvents } = useQuery({
     queryKey: ["upcoming-events-overview"],
     queryFn: async () => {
@@ -320,6 +329,12 @@ const AdminOverview = () => {
         <div className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 text-sm text-purple-700">
           <ClipboardCheck size={16} className="flex-shrink-0" />
           <span><strong>{pendingUploadRequests} score upload request{pendingUploadRequests !== 1 ? "s" : ""}</strong> from class teachers awaiting your approval. Go to <strong>Requests</strong> to review.</span>
+        </div>
+      )}
+      {(pendingApplications ?? 0) > 0 && (
+        <div className="flex items-center gap-3 bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 text-sm text-orange-700">
+          <GraduationCap size={16} className="flex-shrink-0" />
+          <span><strong>{pendingApplications} school application{pendingApplications !== 1 ? "s" : ""}</strong> {pendingApplications === 1 ? "is" : "are"} waiting for a response. Go to <strong>Applications</strong> to review.</span>
         </div>
       )}
 
