@@ -361,10 +361,10 @@ const TeacherOverview = ({ onTabChange }: { onTabChange: (tab: string) => void }
                   <tr key={r.id} className="border-t border-border">
                     <td className="p-2.5 text-foreground font-medium">{r.studentName}</td>
                     <td className="p-2.5 text-muted-foreground">{r.subjectName}</td>
-                    <td className="p-2.5 text-center font-semibold">{r.total_score ?? "—"}</td>
+                    <td className="p-2.5 text-center font-semibold">{r.did_not_participate ? <span className="text-muted-foreground text-xs">DNP</span> : (r.total_score ?? "—")}</td>
                     <td className="p-2.5 text-center">
                       <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: (GRADE_COLORS[r.grade_letter] || "#6b7280") + "22", color: GRADE_COLORS[r.grade_letter] || "#6b7280" }}>
-                        {r.grade_letter || "—"}
+                        {r.did_not_participate ? "—" : (r.grade_letter || "—")}
                       </span>
                     </td>
                     <td className="p-2.5 text-muted-foreground text-xs capitalize">{r.result_type?.replace("_", " ") || "—"}</td>
@@ -626,12 +626,18 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
                           </tr>
                         );
                       }
-                      const score = r ? Number(r.total_score) : null;
-                      const grade = r?.grade_letter || null;
+                      const dnp = r?.did_not_participate;
+                      const grade = !dnp ? (r?.grade_letter || null) : null;
                       return (
                         <tr key={s.id} className="border-t border-border">
                           <td className="p-2.5 font-medium">{s.name}</td>
-                          <td className="p-2.5 text-center font-semibold">{score ?? <span className="text-amber-500 text-xs">Not uploaded</span>}</td>
+                          <td className="p-2.5 text-center font-semibold">
+                            {!r
+                              ? <span className="text-amber-500 text-xs">Not uploaded</span>
+                              : dnp
+                                ? <span className="text-muted-foreground text-xs">Did not participate</span>
+                                : r.total_score ?? "—"}
+                          </td>
                           <td className="p-2.5 text-center">
                             {grade
                               ? <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: (GRADE_COLORS[grade] || "#6b7280") + "22", color: GRADE_COLORS[grade] || "#6b7280" }}>{grade}</span>
@@ -1677,7 +1683,7 @@ export const MyResults = () => {
                     {student?.full_name || `${student?.first_name || ""} ${student?.last_name || ""}`.trim() || "—"}
                   </td>
                   <td className="p-3 text-muted-foreground">{subject?.name || "—"}</td>
-                  <td className="p-3 text-foreground font-semibold">{r.total_score || "—"}</td>
+                  <td className="p-3 text-foreground font-semibold">{r.did_not_participate ? <span className="text-muted-foreground text-xs">DNP</span> : (r.total_score ?? "—")}</td>
                   <td className="p-3">
                     <span
                       className={`px-2 py-1 rounded-md text-xs font-bold ${
