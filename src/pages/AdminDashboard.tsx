@@ -1595,12 +1595,17 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [addParentOpen, setAddParentOpen] = useState(false);
+  const [addMode, setAddMode] = useState<"create" | "link">("create");
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<any>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [parentForm, setParentForm] = useState({ full_name: "", email: "", phone: "" });
   const [createdParent, setCreatedParent] = useState<{ email: string; password: string } | null>(null);
   const [addingParent, setAddingParent] = useState(false);
+  const [parentSearch, setParentSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [linkingId, setLinkingId] = useState<string | null>(null);
 
   const { data: allClassesList } = useQuery({
     queryKey: ["all-classes-for-edit"],
@@ -1774,6 +1779,46 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
       setAddingParent(false);
+    }
+  };
+
+  const handleParentSearch = async (q: string) => {
+    setParentSearch(q);
+    if (q.trim().length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    try {
+      const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "parent");
+      const parentIds = (roles || []).map((r: any) => r.user_id);
+      if (!parentIds.length) { setSearchResults([]); return; }
+      const { data: profiles } = await supabase
+        .from("profiles").select("user_id, full_name, email").in("user_id", parentIds)
+        .ilike("full_name", `%${q}%`).limit(8);
+      setSearchResults(profiles || []);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleLinkExistingParent = async (parentId: string) => {
+    setLinkingId(parentId);
+    try {
+      const { data: existing } = await supabase
+        .from("parent_students").select("id")
+        .eq("parent_id", parentId).eq("student_id", studentId).maybeSingle();
+      if (existing) {
+        toast({ title: "Already linked", description: "This parent is already linked to this student." } as any);
+        return;
+      }
+      const { error } = await supabase.from("parent_students").insert({ parent_id: parentId, student_id: studentId });
+      if (error) throw error;
+      toast({ title: "Parent linked successfully" } as any);
+      setAddParentOpen(false);
+      setParentSearch(""); setSearchResults([]);
+      queryClient.invalidateQueries({ queryKey: ["student-profile", studentId] });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" } as any);
+    } finally {
+      setLinkingId(null);
     }
   };
 
@@ -2014,7 +2059,7 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
       </Dialog>
 
       {/* Add Parent Dialog */}
-      <Dialog open={addParentOpen} onOpenChange={(open) => { setAddParentOpen(open); if (!open) setCreatedParent(null); }}>
+      <Dialog open={addParentOpen} onOpenChange={(open) => { setAddParentOpen(open); if (!open) { setCreatedParent(null); setAddMode("create"); setParentSearch(""); setSearchResults([]); } }}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add Parent / Guardian for {sName}</DialogTitle></DialogHeader>
           {createdParent ? (
@@ -2036,22 +2081,68 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
             </div>
           ) : (
             <div className="space-y-4">
-              <div>
-                <Label>Full Name *</Label>
-                <Input value={parentForm.full_name} onChange={e => setParentForm({ ...parentForm, full_name: e.target.value })} placeholder="e.g. Mrs. Sarah Johnson" />
+              {/* Mode toggle */}
+              <div className="flex rounded-lg border border-border overflow-hidden text-sm">
+                <button onClick={() => setAddMode("create")} className={`flex-1 py-2 font-medium transition-colors ${addMode === "create" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted"}`}>
+                  Create New Account
+                </button>
+                <button onClick={() => setAddMode("link")} className={`flex-1 py-2 font-medium transition-colors ${addMode === "link" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted"}`}>
+                  Link Existing Parent
+                </button>
               </div>
-              <div>
-                <Label>Email Address *</Label>
-                <Input type="email" value={parentForm.email} onChange={e => setParentForm({ ...parentForm, email: e.target.value })} placeholder="parent@email.com" />
-              </div>
-              <div>
-                <Label>Phone Number</Label>
-                <Input value={parentForm.phone} onChange={e => setParentForm({ ...parentForm, phone: e.target.value })} placeholder="+234 800 000 0000" />
-              </div>
-              <p className="text-xs text-muted-foreground">A secure password will be auto-generated and shown to you after creation.</p>
-              <Button className="w-full hero-gradient" onClick={handleAddParent} disabled={addingParent || !parentForm.full_name || !parentForm.email}>
-                {addingParent ? "Creating account..." : "Create Parent Account"}
-              </Button>
+
+              {addMode === "create" ? (
+                <>
+                  <div>
+                    <Label>Full Name *</Label>
+                    <Input value={parentForm.full_name} onChange={e => setParentForm({ ...parentForm, full_name: e.target.value })} placeholder="e.g. Mrs. Sarah Johnson" />
+                  </div>
+                  <div>
+                    <Label>Email Address *</Label>
+                    <Input type="email" value={parentForm.email} onChange={e => setParentForm({ ...parentForm, email: e.target.value })} placeholder="parent@email.com" />
+                  </div>
+                  <div>
+                    <Label>Phone Number</Label>
+                    <Input value={parentForm.phone} onChange={e => setParentForm({ ...parentForm, phone: e.target.value })} placeholder="+234 800 000 0000" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">A secure password will be auto-generated and shown to you after creation.</p>
+                  <Button className="w-full hero-gradient" onClick={handleAddParent} disabled={addingParent || !parentForm.full_name || !parentForm.email}>
+                    {addingParent ? "Creating account..." : "Create Parent Account"}
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">Search for a parent who already has an account (e.g. a sibling's parent) and link them to {sName}.</p>
+                  <div className="relative">
+                    <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      className="pl-9"
+                      placeholder="Type parent name to search..."
+                      value={parentSearch}
+                      onChange={e => handleParentSearch(e.target.value)}
+                    />
+                  </div>
+                  {searching && <p className="text-xs text-muted-foreground text-center py-2">Searching…</p>}
+                  {!searching && parentSearch.length >= 2 && searchResults.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-2">No parent accounts found.</p>
+                  )}
+                  {searchResults.length > 0 && (
+                    <div className="space-y-2 max-h-52 overflow-y-auto">
+                      {searchResults.map((p: any) => (
+                        <div key={p.user_id} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-card">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">{p.full_name}</p>
+                            {p.email && <p className="text-xs text-muted-foreground truncate">{p.email}</p>}
+                          </div>
+                          <Button size="sm" className="hero-gradient shrink-0" onClick={() => handleLinkExistingParent(p.user_id)} disabled={linkingId === p.user_id}>
+                            {linkingId === p.user_id ? "Linking…" : "Link"}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </DialogContent>
