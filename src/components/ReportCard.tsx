@@ -82,6 +82,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
 
       const subjectStats: Record<string, { highest: number; lowest: number }> = {};
       (classResults || []).forEach((r: any) => {
+        if (r.total_score == null) return;
         const score = Number(r.total_score);
         if (!subjectStats[r.subject_id]) subjectStats[r.subject_id] = { highest: score, lowest: score };
         else {
