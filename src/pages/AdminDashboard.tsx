@@ -77,6 +77,7 @@ const AdminDashboard = () => {
       {activeTab === "students" && <ManageStudents />}
       {activeTab === "subjects" && <ManageSubjects />}
       {activeTab === "terms" && <ManageTerms />}
+      {activeTab === "parents" && <ManageParents />}
       {activeTab === "admissions" && <ManageAdmissions />}
       {activeTab === "events" && <ManageEvents />}
       {activeTab === "results" && <ViewAllResults isSuperAdmin={isSuperAdmin} />}
@@ -660,9 +661,9 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
         };
       });
 
-      return usersWithRoles.sort((a: any, b: any) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
+      return usersWithRoles
+        .filter((u: any) => u.role !== "parent")
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     },
   });
 
@@ -857,7 +858,6 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
                       <SelectContent>
                         <SelectItem value="admin">Admin</SelectItem>
                         <SelectItem value="teacher">Teacher</SelectItem>
-                        <SelectItem value="parent">Parent</SelectItem>
                         <SelectItem value="creche_staff">Crèche Staff</SelectItem>
                       </SelectContent>
                     </Select>
@@ -949,7 +949,6 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
                 <SelectContent>
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="teacher">Teacher</SelectItem>
-                  <SelectItem value="parent">Parent</SelectItem>
                   <SelectItem value="creche_staff">Crèche Staff</SelectItem>
                 </SelectContent>
               </Select>
@@ -2601,6 +2600,211 @@ const ManageTerms = () => {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+};
+
+const ManageParents = () => {
+  const { isSuperAdmin } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState<any | null>(null);
+  const [resetPasswordFor, setResetPasswordFor] = useState<any | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [pwCopied, setPwCopied] = useState(false);
+
+  const { data: parents, isLoading } = useQuery({
+    queryKey: ["all-parents"],
+    queryFn: async () => {
+      const { data: roles } = await supabase.from("user_roles").select("user_id").eq("role", "parent");
+      const parentIds = (roles || []).map((r: any) => r.user_id);
+      if (!parentIds.length) return [];
+
+      const [profilesRes, linksRes] = await Promise.all([
+        supabase.from("profiles").select("user_id, full_name, email, phone, created_at").in("user_id", parentIds),
+        supabase.from("parent_students").select("parent_id, student_id, students(id, first_name, last_name, full_name)").in("parent_id", parentIds),
+      ]);
+
+      const childrenByParent: Record<string, any[]> = {};
+      (linksRes.data || []).forEach((l: any) => {
+        if (!childrenByParent[l.parent_id]) childrenByParent[l.parent_id] = [];
+        if (l.students) childrenByParent[l.parent_id].push(l.students);
+      });
+
+      return (profilesRes.data || []).map((p: any) => ({
+        ...p,
+        children: childrenByParent[p.user_id] || [],
+      })).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    },
+  });
+
+  const updateParent = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("profiles")
+        .update({ full_name: editing.full_name, phone: editing.phone || null })
+        .eq("user_id", editing.user_id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Parent updated" });
+      queryClient.invalidateQueries({ queryKey: ["all-parents"] });
+      setEditing(null);
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteParent = useMutation({
+    mutationFn: async (parent: any) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ user_id: parent.user_id }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || "Failed to delete");
+    },
+    onSuccess: () => {
+      toast({ title: "Parent account deleted" });
+      queryClient.invalidateQueries({ queryKey: ["all-parents"] });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const resetPassword = useMutation({
+    mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-user-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ user_id: userId, password }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || "Failed to reset password");
+    },
+    onSuccess: () => {
+      toast({ title: "Password reset successfully" });
+      setResetPasswordFor(null);
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const openResetPassword = (parent: any) => {
+    const firstName = parent.full_name?.trim().split(/\s+/).find((w: string) => !/^(mrs|mr|miss|ms|dr|coach)\.?$/i.test(w)) || "User";
+    const cap = firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+    setNewPassword(`${cap}@IBS25`);
+    setPwCopied(false);
+    setResetPasswordFor(parent);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="text-lg font-heading text-foreground">Parents &amp; Guardians</h3>
+        <p className="text-sm text-muted-foreground">To add a parent, go to a student's profile and use "Add Parent / Guardian".</p>
+      </div>
+
+      {/* Edit dialog */}
+      <Dialog open={!!editing} onOpenChange={open => !open && setEditing(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Parent</DialogTitle></DialogHeader>
+          {editing && <div className="space-y-4">
+            <div className="text-xs text-muted-foreground bg-muted rounded p-2">{editing.email}</div>
+            <div><Label>Full Name</Label><Input value={editing.full_name || ""} onChange={e => setEditing({ ...editing, full_name: e.target.value })} /></div>
+            <div><Label>Phone</Label><Input value={editing.phone || ""} onChange={e => setEditing({ ...editing, phone: e.target.value })} placeholder="+234 xxx xxx xxxx" /></div>
+            <Button className="w-full hero-gradient" onClick={() => updateParent.mutate()} disabled={updateParent.isPending || !editing.full_name}>
+              {updateParent.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset password dialog */}
+      <Dialog open={!!resetPasswordFor} onOpenChange={open => !open && setResetPasswordFor(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Reset Password</DialogTitle></DialogHeader>
+          {resetPasswordFor && <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Set a new password for <strong className="text-foreground">{resetPasswordFor.full_name}</strong>.</p>
+            <div>
+              <Label>New Password</Label>
+              <div className="flex gap-2 mt-1">
+                <Input value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                <Button type="button" variant="outline" size="icon" onClick={() => { navigator.clipboard.writeText(newPassword); setPwCopied(true); setTimeout(() => setPwCopied(false), 2000); }}>
+                  {pwCopied ? <Check size={16} /> : <Copy size={16} />}
+                </Button>
+              </div>
+            </div>
+            <Button className="w-full hero-gradient" disabled={resetPassword.isPending || !newPassword}
+              onClick={() => resetPassword.mutate({ userId: resetPasswordFor.user_id, password: newPassword })}>
+              {resetPassword.isPending ? "Resetting..." : "Reset Password"}
+            </Button>
+          </div>}
+        </DialogContent>
+      </Dialog>
+
+      {isLoading ? (
+        <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-muted rounded-xl animate-pulse" />)}</div>
+      ) : !parents?.length ? (
+        <div className="bg-card rounded-xl p-8 shadow-card text-center text-muted-foreground">
+          <Users className="mx-auto mb-3" size={36} />
+          <p>No parent accounts yet. Add parents from a student's profile.</p>
+        </div>
+      ) : (
+        <div className="bg-card rounded-xl shadow-card overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted">
+              <tr>
+                <th className="text-left p-3 font-medium text-muted-foreground">Name</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Email</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Phone</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Children</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Joined</th>
+                <th className="p-3" /><th className="p-3" /><th className="p-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {parents.map((parent: any) => (
+                <tr key={parent.user_id} className="border-t border-border hover:bg-muted/30 transition-colors">
+                  <td className="p-3 font-medium text-foreground">{parent.full_name || "—"}</td>
+                  <td className="p-3 text-muted-foreground">{parent.email || "—"}</td>
+                  <td className="p-3 text-muted-foreground">{parent.phone || "—"}</td>
+                  <td className="p-3">
+                    {parent.children.length === 0
+                      ? <span className="text-xs text-amber-600">No children linked</span>
+                      : <div className="flex flex-wrap gap-1">
+                          {parent.children.map((c: any) => (
+                            <span key={c.id} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
+                              {c.full_name || `${c.first_name} ${c.last_name}`.trim()}
+                            </span>
+                          ))}
+                        </div>
+                    }
+                  </td>
+                  <td className="p-3 text-muted-foreground">{new Date(parent.created_at).toLocaleDateString()}</td>
+                  <td className="p-3">
+                    <button onClick={() => setEditing({ ...parent })} className="text-muted-foreground hover:text-primary transition-colors" title="Edit"><Pencil size={14} /></button>
+                  </td>
+                  <td className="p-3">
+                    <button onClick={() => openResetPassword(parent)} className="text-muted-foreground hover:text-primary transition-colors" title="Reset Password"><KeyRound size={14} /></button>
+                  </td>
+                  <td className="p-3">
+                    {isSuperAdmin && (
+                      <button
+                        onClick={() => { if (confirm(`Delete ${parent.full_name}? This cannot be undone.`)) deleteParent.mutate(parent); }}
+                        disabled={deleteParent.isPending}
+                        className="text-destructive hover:opacity-70 transition-opacity"
+                        title="Delete"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };

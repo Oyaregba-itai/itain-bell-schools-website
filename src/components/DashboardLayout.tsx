@@ -77,6 +77,7 @@ const DashboardLayout = ({ children, activeTab, onTabChange, extraTabs = [], tab
     { id: "users", label: "Manage Staff", icon: Users },
     { id: "classes", label: "Classes", icon: BookOpen },
     { id: "students", label: "Students", icon: GraduationCap },
+    { id: "parents", label: "Parents", icon: UserPlus },
     { id: "subjects", label: "Subjects", icon: BookOpen },
     { id: "terms", label: "Terms", icon: Calendar },
     { id: "events", label: "Events", icon: Calendar },
