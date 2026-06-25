@@ -1786,6 +1786,9 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
       });
       if (linkError) throw linkError;
 
+      // Store password so admin can look it up later from the Parents page
+      await supabase.from("profiles").update({ temp_password: password }).eq("user_id", result.user.id);
+
       setCreatedParent({ email: parentForm.email, password });
       setParentForm({ full_name: "", email: "", phone: "" });
       queryClient.invalidateQueries({ queryKey: ["student-profile", studentId] });
@@ -2621,7 +2624,7 @@ const ManageParents = () => {
       if (!parentIds.length) return [];
 
       const [profilesRes, linksRes] = await Promise.all([
-        supabase.from("profiles").select("user_id, full_name, email, phone, created_at").in("user_id", parentIds),
+        supabase.from("profiles").select("user_id, full_name, email, phone, temp_password, created_at").in("user_id", parentIds),
         supabase.from("parent_students").select("parent_id, student_id, students(id, first_name, last_name, full_name)").in("parent_id", parentIds),
       ]);
 
@@ -2681,9 +2684,11 @@ const ManageParents = () => {
       });
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || "Failed to reset password");
+      await supabase.from("profiles").update({ temp_password: password }).eq("user_id", userId);
     },
     onSuccess: () => {
       toast({ title: "Password reset successfully" });
+      queryClient.invalidateQueries({ queryKey: ["all-parents"] });
       setResetPasswordFor(null);
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
@@ -2757,6 +2762,7 @@ const ManageParents = () => {
                 <th className="text-left p-3 font-medium text-muted-foreground">Name</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">Email</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">Phone</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Password</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">Children</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">Joined</th>
                 <th className="p-3" /><th className="p-3" /><th className="p-3" />
@@ -2768,6 +2774,21 @@ const ManageParents = () => {
                   <td className="p-3 font-medium text-foreground">{parent.full_name || "—"}</td>
                   <td className="p-3 text-muted-foreground">{parent.email || "—"}</td>
                   <td className="p-3 text-muted-foreground">{parent.phone || "—"}</td>
+                  <td className="p-3">
+                    {parent.temp_password
+                      ? <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded border border-border text-foreground">{parent.temp_password}</span>
+                          <button
+                            title="Copy password"
+                            onClick={() => { navigator.clipboard.writeText(parent.temp_password); toast({ title: "Password copied" } as any); }}
+                            className="text-muted-foreground hover:text-primary transition-colors"
+                          >
+                            <Copy size={13} />
+                          </button>
+                        </div>
+                      : <span className="text-xs text-muted-foreground italic">—</span>
+                    }
+                  </td>
                   <td className="p-3">
                     {parent.children.length === 0
                       ? <span className="text-xs text-amber-600">No children linked</span>
