@@ -15,18 +15,19 @@ interface ReportCardProps {
 }
 
 const GRADE_SCALE = [
-  { min: 28.5, max: 30,    letter: "A+", remark: "Outstanding", color: "#7B2D8B", range: "28.5 – 30"   },
-  { min: 27.0, max: 28.49, letter: "A",  remark: "Outstanding", color: "#4a0e6e", range: "27.0 – 28.4" },
-  { min: 25.5, max: 26.99, letter: "B+", remark: "Proficient",  color: "#166534", range: "25.5 – 26.9" },
-  { min: 24.0, max: 25.49, letter: "B",  remark: "Proficient",  color: "#166534", range: "24.0 – 25.4" },
-  { min: 22.5, max: 23.99, letter: "C+", remark: "Capable",     color: "#1e40af", range: "22.5 – 23.9" },
-  { min: 21.0, max: 22.49, letter: "C",  remark: "Capable",     color: "#1e40af", range: "21.0 – 22.4" },
-  { min: 18.0, max: 20.99, letter: "D",  remark: "PTE",         color: "#c2410c", range: "18.0 – 20.9" },
-  { min: 0,    max: 17.99, letter: "E",  remark: "NME",         color: "#b91c1c", range: "< 18"        },
+  { min: 95,  max: 100,  letter: "A+", remark: "Outstanding", color: "#7B2D8B", range: "95 – 100"  },
+  { min: 90,  max: 94.9, letter: "A",  remark: "Outstanding", color: "#4a0e6e", range: "90 – 94.9" },
+  { min: 85,  max: 89.9, letter: "B+", remark: "Proficient",  color: "#166534", range: "85 – 89.9" },
+  { min: 80,  max: 84.9, letter: "B",  remark: "Proficient",  color: "#166534", range: "80 – 84.9" },
+  { min: 75,  max: 79.9, letter: "C+", remark: "Capable",     color: "#1e40af", range: "75 – 79.9" },
+  { min: 70,  max: 74.9, letter: "C",  remark: "Capable",     color: "#1e40af", range: "70 – 74.9" },
+  { min: 60,  max: 69.9, letter: "D",  remark: "PTE",         color: "#c2410c", range: "60 – 69.9" },
+  { min: 0,   max: 59.9, letter: "E",  remark: "NME",         color: "#b91c1c", range: "0 – 59.9"  },
 ];
 
-const getGradeInfo = (score: number) =>
-  GRADE_SCALE.find((g) => score >= g.min && score <= g.max) || GRADE_SCALE[GRADE_SCALE.length - 1];
+// All grade lookups now work on percentage (0–100)
+const getGradeInfo = (pct: number) =>
+  GRADE_SCALE.find((g) => pct >= g.min && pct <= g.max) ?? GRADE_SCALE[GRADE_SCALE.length - 1];
 
 const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint }: ReportCardProps) => {
   const autoPrinted = useRef(false);
@@ -38,7 +39,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
       const [studentRes, termRes, resultsRes, submissionRes] = await Promise.all([
         supabase.from("students").select("*").eq("id", studentId).single(),
         supabase.from("terms").select("*").eq("id", termId).single(),
-        supabase.from("results").select("*").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType),
+        supabase.from("results").select("id, subject_id, term_id, result_type, student_id, total_score, portfolio_score, exam_score, grade_letter, teacher_comments, did_not_participate, uploaded_by, created_at").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType),
         supabase.from("report_submissions").select("head_teacher_comment, head_of_school_comment, approved_by, days_present, days_open, next_term_begins").eq("student_id", studentId).eq("term_id", termId).eq("result_type", resultType).maybeSingle(),
       ]);
       if (studentRes.error) throw studentRes.error;
@@ -91,6 +92,30 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
         }
       });
 
+      // Fetch sibling terms (same academic year) for cumulative data — end_of_term only
+      let yearTerms: any[] = [];
+      let termOrder = 0;
+      let prevTermResults: any[] = [];
+      if (termRes.data?.academic_year) {
+        const { data: yt } = await supabase
+          .from("terms")
+          .select("id, name, start_date")
+          .eq("academic_year", termRes.data.academic_year)
+          .order("start_date", { ascending: true });
+        yearTerms = yt || [];
+        termOrder = yearTerms.findIndex((t: any) => t.id === termId);
+        const prevTermIds = yearTerms.slice(0, termOrder < 0 ? yearTerms.length : termOrder).map((t: any) => t.id);
+        if (prevTermIds.length > 0) {
+          const { data: pr } = await supabase
+            .from("results")
+            .select("term_id, subject_id, total_score")
+            .eq("student_id", studentId)
+            .eq("result_type", "end_of_term")
+            .in("term_id", prevTermIds);
+          prevTermResults = pr || [];
+        }
+      }
+
       return {
         student: { ...studentRes.data, className },
         term: termRes.data,
@@ -105,6 +130,9 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
         daysOpen: submissionRes.data?.days_open ?? null,
         daysPresent: submissionRes.data?.days_present ?? null,
         nextTermBegins: submissionRes.data?.next_term_begins ?? null,
+        yearTerms,
+        termOrder,
+        prevTermResults,
       };
     },
   });
@@ -143,12 +171,16 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
 
   const handlePrint = () => {
     if (!data) return;
-    const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl, isCommentMode, daysOpen, daysPresent, nextTermBegins } = data;
+    const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl, isCommentMode, daysOpen, daysPresent, nextTermBegins, yearTerms, termOrder, prevTermResults } = data;
+    const isEndOfTerm = resultType === "end_of_term";
     const scoredResults = results.filter((r: any) => !r.did_not_participate);
-    const totalObtainable = scoredResults.length * 30;
+    const hasNewFormat = isEndOfTerm && scoredResults.some((r: any) => r.portfolio_score != null);
+    const outOf = isEndOfTerm ? (hasNewFormat ? 100 : 70) : 30;
+    const totalObtainable = scoredResults.length * outOf;
     const totalObtained = scoredResults.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
+    const totalPct = totalObtainable > 0 ? (totalObtained / totalObtainable) * 100 : 0;
+    const overallGrade = getGradeInfo(totalPct);
     const average = scoredResults.length > 0 ? totalObtained / scoredResults.length : 0;
-    const overallGrade = getGradeInfo(average);
     const studentName = student.full_name || `${student.first_name || ""} ${student.last_name || ""}`.trim();
     const gender = student.gender ? String(student.gender).toUpperCase() : "—";
     const dob = student.date_of_birth;
@@ -161,20 +193,58 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
     const photoUrl = student.avatar_url || "";
     const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
+    // Build per-subject previous term lookup
+    const prevBySubject: Record<string, number[]> = {};
+    (prevTermResults || []).forEach((pr: any) => {
+      const termIdx = (yearTerms || []).findIndex((t: any) => t.id === pr.term_id);
+      if (termIdx < 0) return;
+      if (!prevBySubject[pr.subject_id]) prevBySubject[pr.subject_id] = [];
+      prevBySubject[pr.subject_id][termIdx] = Number(pr.total_score || 0);
+    });
+
+    const subjectColspan = isEndOfTerm ? 8 : 5;
     const subjectRows = results.map((r: any, i: number) => {
       const bg = i % 2 === 0 ? "#fff" : "#f8f9fa";
+      const stats = subjectStats[r.subject_id];
       if (r.did_not_participate) {
         return `<tr style="background:${bg}">
           <td style="padding:5px 8px;border-bottom:1px solid #ddd">${r.subjectName}</td>
-          <td colspan="5" style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:center;color:#888;font-style:italic">Did not take part</td>
+          <td colspan="${subjectColspan}" style="padding:5px 8px;border-bottom:1px solid #ddd;text-align:center;color:#888;font-style:italic">Did not take part</td>
         </tr>`;
       }
-      const score = Number(r.total_score || 0);
-      const g = getGradeInfo(score);
-      const stats = subjectStats[r.subject_id];
+      const total = Number(r.total_score || 0);
+      const pct = isEndOfTerm ? (hasNewFormat ? total : (total / 70) * 100) : (total / 30) * 100;
+      const g = getGradeInfo(pct);
+
+      if (isEndOfTerm) {
+        const portfolio = r.portfolio_score != null ? Number(r.portfolio_score) : "—";
+        const exam = r.exam_score != null ? Number(r.exam_score) : "—";
+        const test = (r.portfolio_score != null && r.exam_score != null)
+          ? Math.max(0, total - Number(r.portfolio_score) - Number(r.exam_score))
+          : "—";
+        const prevScores = prevBySubject[r.subject_id] || [];
+        const term1 = prevScores[0] != null ? prevScores[0] : "—";
+        const term2 = prevScores[1] != null ? prevScores[1] : "—";
+        const cumulative = [term1, term2, total].every(v => v !== "—")
+          ? (Number(term1) + Number(term2) + total) : "—";
+        return `<tr style="background:${bg}">
+          <td style="padding:4px 6px;border-bottom:1px solid #ddd">${r.subjectName}</td>
+          <td style="padding:4px 5px;border-bottom:1px solid #ddd;text-align:center">${portfolio}</td>
+          <td style="padding:4px 5px;border-bottom:1px solid #ddd;text-align:center">${test}</td>
+          <td style="padding:4px 5px;border-bottom:1px solid #ddd;text-align:center">${exam}</td>
+          <td style="padding:4px 5px;border-bottom:1px solid #ddd;text-align:center;font-weight:bold">${total}</td>
+          <td style="padding:4px 5px;border-bottom:1px solid #ddd;text-align:center;font-weight:bold;color:${g.color}">${g.letter}</td>
+          <td style="padding:4px 5px;border-bottom:1px solid #ddd;font-weight:bold;color:${g.color}">${g.remark}</td>
+          <td style="padding:4px 5px;border-bottom:1px solid #ddd;text-align:center">${stats?.highest ?? "—"}</td>
+          <td style="padding:4px 5px;border-bottom:1px solid #ddd;text-align:center">${stats?.lowest ?? "—"}</td>
+          <td style="padding:4px 5px;border-bottom:1px solid #ddd;text-align:center">${term1}</td>
+          <td style="padding:4px 5px;border-bottom:1px solid #ddd;text-align:center">${term2}</td>
+          <td style="padding:4px 5px;border-bottom:1px solid #ddd;text-align:center;font-weight:bold">${cumulative}</td>
+        </tr>`;
+      }
       return `<tr style="background:${bg}">
         <td style="padding:5px 8px;border-bottom:1px solid #ddd">${r.subjectName}</td>
-        <td style="padding:5px 6px;border-bottom:1px solid #ddd;text-align:center">${score}</td>
+        <td style="padding:5px 6px;border-bottom:1px solid #ddd;text-align:center">${total}</td>
         <td style="padding:5px 6px;border-bottom:1px solid #ddd;text-align:center;font-weight:bold;color:${g.color}">${g.letter}</td>
         <td style="padding:5px 6px;border-bottom:1px solid #ddd;font-weight:bold;color:${g.color}">${g.remark}</td>
         <td style="padding:5px 6px;border-bottom:1px solid #ddd;text-align:center">${stats?.highest ?? "—"}</td>
@@ -184,8 +254,9 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
 
     const bars = scoredResults.map((r: any) => {
       const score = Number(r.total_score || 0);
-      const g = getGradeInfo(score);
-      const h = Math.max(2, Math.round((score / 30) * 70));
+      const pct = isEndOfTerm ? (hasNewFormat ? score : (score / 70) * 100) : (score / 30) * 100;
+      const g = getGradeInfo(pct);
+      const h = Math.max(2, Math.round((pct / 100) * 70));
       const name = r.subjectName.substring(0, 8);
       return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0">
         <div style="font-size:6px;margin-bottom:1px">${score}</div>
@@ -276,10 +347,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
       return;
     }
 
-    const html = `<!DOCTYPE html><html><head><title>${studentName} — ${reportHeader}</title>
-    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:12px}
-    @media print{body{padding:0}@page{margin:8mm;size:A4}}table{border-collapse:collapse}</style>
-    </head><body>
+    const sharedHeader = `
     <table style="width:100%;border:2px solid #333;margin-bottom:0"><tr>
       <td style="border:1px solid #333;padding:6px;text-align:center;width:75px" rowspan="2">
         <img src="${logoAbsUrl}" style="height:55px;max-width:65px" onerror="this.style.display='none'">
@@ -290,26 +358,108 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
       </td></tr><tr>
       <td style="border:1px solid #333;text-align:center;padding:5px 8px;background:#d6e8f7">
         <strong>${termName.toUpperCase()} ${reportHeader} ${session} SESSION</strong>
+      </td></tr></table>`;
+
+    const sharedComments = `
+    <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
+      <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Class Teacher Comments</td></tr><tr>
+      <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headTeacherComment || "—"}</td>
+      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date: ${today}</td>
+      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">${headTeacherSignatureUrl ? `<img src="${headTeacherSignatureUrl}" style="height:28px;max-width:90px;object-fit:contain" alt="signature" />` : "Signature: ___________"}</td></tr><tr>
+      <td colspan="3" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Class Teacher:</strong> ${headTeacherName || "—"}</td></tr></table>
+    <table style="width:100%;border:2px solid #333;border-top:0"><tr>
+      <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Head of School Comments</td></tr><tr>
+      <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headOfSchoolComment || "—"}</td>
+      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date: ${today}</td>
+      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">${headOfSchoolSignatureUrl ? `<img src="${headOfSchoolSignatureUrl}" style="height:28px;max-width:90px;object-fit:contain" alt="signature" />` : "Signature: ___________"}</td></tr><tr>
+      <td colspan="3" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Acting Head of School:</strong> Mrs Goodness Duru</td></tr></table>`;
+
+    const daysAbsent2 = (daysOpen != null && daysPresent != null) ? daysOpen - daysPresent : "—";
+    const termNames = (yearTerms || []).map((t: any) => t.name);
+    const t1Label = termNames[0] ? `${termNames[0]} Score` : "1st Term";
+    const t2Label = termNames[1] ? `${termNames[1]} Score` : "2nd Term";
+
+    const htmlBody = isEndOfTerm ? `
+    ${sharedHeader}
+    <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
+      <td style="border:1px solid #333;padding:4px;text-align:center;width:70px;vertical-align:middle" rowspan="4">
+        ${photoUrl ? `<img src="${photoUrl}" style="width:60px;height:75px;object-fit:cover">` : `<div style="width:60px;height:75px;background:#eee;display:flex;align-items:center;justify-content:center;font-size:8px;color:#999">No Photo</div>`}
+      </td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Name:</td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold" colspan="3">${studentName}</td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Class:</td>
+      <td style="border:1px solid #333;padding:3px 6px" colspan="2">${student.className}</td></tr><tr>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Sex:</td>
+      <td style="border:1px solid #333;padding:3px 6px" colspan="3">${gender}</td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Age:</td>
+      <td style="border:1px solid #333;padding:3px 6px" colspan="2">${age}</td></tr><tr>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Score Obtainable:</td>
+      <td style="border:1px solid #333;padding:3px 6px" colspan="3">${totalObtainable}</td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Score Obtained:</td>
+      <td style="border:1px solid #333;padding:3px 6px" colspan="2">${totalObtained}</td></tr><tr>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Term Percentage:</td>
+      <td style="border:1px solid #333;padding:3px 6px" colspan="3">${totalPct.toFixed(1)}%</td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Term Grade:</td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold;color:${overallGrade.color}" colspan="2">${overallGrade.letter} — ${overallGrade.remark}</td>
+    </tr></table>
+    <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
+      <td style="border:1px solid #333;padding:4px;text-align:center;font-weight:bold;background:#ebebeb">ACADEMICS (COGNITIVE DOMAIN)</td>
+    </tr></table>
+    <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0">
+      <thead><tr style="background:#d6e8f7;font-size:9px">
+        <th style="padding:4px 6px;border:1px solid #bbb;text-align:left">SUBJECTS</th>
+        <th style="padding:4px 3px;border:1px solid #bbb;text-align:center">Portfolio<br>&amp; Project<br>(10)</th>
+        <th style="padding:4px 3px;border:1px solid #bbb;text-align:center">Test<br>Score<br>(30)</th>
+        <th style="padding:4px 3px;border:1px solid #bbb;text-align:center">Exam<br>Score<br>(60)</th>
+        <th style="padding:4px 3px;border:1px solid #bbb;text-align:center">Total<br>(100)</th>
+        <th style="padding:4px 3px;border:1px solid #bbb;text-align:center">Grade</th>
+        <th style="padding:4px 3px;border:1px solid #bbb;text-align:center">Remark</th>
+        <th style="padding:4px 3px;border:1px solid #bbb;text-align:center">Highest<br>in Class</th>
+        <th style="padding:4px 3px;border:1px solid #bbb;text-align:center">Lowest<br>in Class</th>
+        <th style="padding:4px 3px;border:1px solid #bbb;text-align:center">${t1Label}<br>(100)</th>
+        <th style="padding:4px 3px;border:1px solid #bbb;text-align:center">${t2Label}<br>(100)</th>
+        <th style="padding:4px 3px;border:1px solid #bbb;text-align:center">Cumul.<br>(300)</th>
+      </tr></thead>
+      <tbody style="font-size:9px">${subjectRows}</tbody>
+    </table>
+    <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
+      <td style="border:1px solid #333;padding:10px 12px;vertical-align:top;width:50%">
+        <table style="width:100%;border-collapse:collapse;font-size:9px">
+          <tr style="background:#d6e8f7"><td colspan="2" style="padding:3px 6px;font-weight:bold;text-align:center">Attendance</td></tr>
+          <tr><td style="padding:4px 6px;border-bottom:1px solid #eee;font-weight:bold">Days School Open:</td><td style="padding:4px 6px;border-bottom:1px solid #eee;text-align:right">${daysOpen ?? "—"}</td></tr>
+          <tr><td style="padding:4px 6px;border-bottom:1px solid #eee;font-weight:bold">Days Present:</td><td style="padding:4px 6px;border-bottom:1px solid #eee;text-align:right">${daysPresent ?? "—"}</td></tr>
+          <tr><td style="padding:4px 6px;border-bottom:1px solid #eee;font-weight:bold">Days Absent:</td><td style="padding:4px 6px;border-bottom:1px solid #eee;text-align:right">${daysAbsent2}</td></tr>
+          <tr><td style="padding:4px 6px;font-weight:bold">Christmas Term Begins:</td><td style="padding:4px 6px;text-align:right;font-size:8px">${nextTermBegins ?? "—"}</td></tr>
+        </table>
+      </td>
+      <td style="border:1px solid #333;padding:6px 8px;vertical-align:top;width:50%">
+        <table style="width:100%;border-collapse:collapse;font-size:8px">
+          <tr style="background:#333;color:white"><th style="padding:2px 4px;text-align:left">Score %</th><th style="padding:2px 4px">Grade</th><th style="padding:2px 4px">Description</th><th style="padding:2px 4px">Colour</th></tr>
+          ${gradeKeyRows}
+        </table>
+        <div style="font-size:7.5px;margin-top:3px;color:#555">N.B: PTE = PROGRESSING TOWARDS EXPECTATION &nbsp;|&nbsp; NME = NOT MEETING EXPECTATION</div>
       </td></tr></table>
+    ${sharedComments}` : `
+    ${sharedHeader}
     <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
       <td style="border:1px solid #333;padding:4px;text-align:center;width:75px;vertical-align:middle" rowspan="4">
         ${photoUrl ? `<img src="${photoUrl}" style="width:65px;height:80px;object-fit:cover">` : `<div style="width:65px;height:80px;background:#eee;display:flex;align-items:center;justify-content:center;font-size:8px;color:#999">No Photo</div>`}
       </td>
       <td style="border:1px solid #333;padding:4px 8px;width:22%"><strong>Name:</strong></td>
       <td style="border:1px solid #333;padding:4px 8px;width:28%"><strong>${studentName}</strong></td>
-      <td style="border:1px solid #333;padding:4px 8px;width:25%"><strong>${scoreLabel} Score Obtainable:</strong></td>
+      <td style="border:1px solid #333;padding:4px 8px;width:25%"><strong>Mid Term Score Obtainable:</strong></td>
       <td style="border:1px solid #333;padding:4px 8px;font-style:italic">${totalObtainable}</td></tr><tr>
       <td style="border:1px solid #333;padding:4px 8px"><strong>Sex:</strong></td>
       <td style="border:1px solid #333;padding:4px 8px">${gender}</td>
-      <td style="border:1px solid #333;padding:4px 8px"><strong>${scoreLabel} Score Obtained:</strong></td>
+      <td style="border:1px solid #333;padding:4px 8px"><strong>Mid Term Score Obtained:</strong></td>
       <td style="border:1px solid #333;padding:4px 8px;font-style:italic">${totalObtained}</td></tr><tr>
       <td style="border:1px solid #333;padding:4px 8px"><strong>Class:</strong></td>
       <td style="border:1px solid #333;padding:4px 8px">${student.className}</td>
-      <td style="border:1px solid #333;padding:4px 8px"><strong>${scoreLabel} Average:</strong></td>
+      <td style="border:1px solid #333;padding:4px 8px"><strong>Mid Term Average:</strong></td>
       <td style="border:1px solid #333;padding:4px 8px;font-style:italic">${average.toFixed(2)}</td></tr><tr>
       <td style="border:1px solid #333;padding:4px 8px"><strong>Age:</strong></td>
       <td style="border:1px solid #333;padding:4px 8px">${age}</td>
-      <td style="border:1px solid #333;padding:4px 8px"><strong>${scoreLabel} Grade:</strong></td>
+      <td style="border:1px solid #333;padding:4px 8px"><strong>Mid Term Grade:</strong></td>
       <td style="border:1px solid #333;padding:4px 8px;font-weight:bold;color:${overallGrade.color}">${overallGrade.letter}</td>
     </tr></table>
     <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
@@ -320,37 +470,30 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
         <table style="width:100%;border-collapse:collapse;font-size:10px"><thead>
           <tr style="background:#d6e8f7">
             <th style="padding:5px 8px;border-bottom:1px solid #333;text-align:left">SUBJECTS</th>
-            <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">${scoreLabel}<br>Total (30)</th>
+            <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">Mid Term<br>Total (30)</th>
             <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">Grade</th>
             <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">Remark</th>
-            <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">Highest Score<br>in Class</th>
-            <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">Lowest Score<br>in Class</th>
+            <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">Highest<br>in Class</th>
+            <th style="padding:5px 4px;border-bottom:1px solid #333;text-align:center">Lowest<br>in Class</th>
           </tr></thead><tbody>${subjectRows}</tbody></table>
       </td>
       <td style="border:1px solid #333;padding:8px;vertical-align:top;width:42%">
-        <div style="font-size:9px;font-weight:bold;text-align:center;margin-bottom:4px">${scoreLabel} Total (30)</div>
+        <div style="font-size:9px;font-weight:bold;text-align:center;margin-bottom:4px">Mid Term Total (30)</div>
         <div style="display:flex;align-items:flex-end;height:75px;gap:1px;border-left:1px solid #999;border-bottom:1px solid #999;padding:0 2px">${bars}</div>
         <br>
         <table style="width:100%;border-collapse:collapse;font-size:9px"><thead>
           <tr style="background:#333;color:white">
-            <th style="padding:3px 5px;text-align:left">Score</th><th style="padding:3px 5px">Grade</th>
+            <th style="padding:3px 5px;text-align:left">Score %</th><th style="padding:3px 5px">Grade</th>
             <th style="padding:3px 5px">Description</th><th style="padding:3px 5px">Colour</th>
           </tr></thead><tbody>${gradeKeyRows}</tbody></table>
         <div style="font-size:8px;margin-top:4px;color:#555">N.B: PTE means PROGRESSING TOWARDS EXPECTATION and NME means NOT MEETING EXPECTATION</div>
       </td></tr></table>
-    <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
-      <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Class Teacher Comments</td></tr><tr>
-      <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headTeacherComment}</td>
-      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date: ${today}</td>
-      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">${headTeacherSignatureUrl ? `<img src="${headTeacherSignatureUrl}" style="height:28px;max-width:90px;object-fit:contain" alt="signature" />` : "Signature: ___________"}</td></tr><tr>
-      <td colspan="3" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Class Teacher:</strong> ${headTeacherName || "—"}</td></tr></table>
-    <table style="width:100%;border:2px solid #333;border-top:0"><tr>
-      <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Head of School Comments</td></tr><tr>
-      <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headOfSchoolComment}</td>
-      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date: ${today}</td>
-      <td style="border:1px solid #333;padding:5px 8px;font-size:10px">${headOfSchoolSignatureUrl ? `<img src="${headOfSchoolSignatureUrl}" style="height:28px;max-width:90px;object-fit:contain" alt="signature" />` : "Signature: ___________"}</td></tr><tr>
-      <td colspan="3" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Acting Head of School:</strong> Mrs Goodness Duru</td></tr></table>
-    </body></html>`;
+    ${sharedComments}`;
+
+    const html = `<!DOCTYPE html><html><head><title>${studentName} — ${reportHeader}</title>
+    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:12px}
+    @media print{body{padding:0}@page{margin:6mm;size:A4}}table{border-collapse:collapse}</style>
+    </head><body>${htmlBody}</body></html>`;
 
     const win = window.open("", "_blank", "width=900,height=1100");
     if (!win) return;
@@ -376,14 +519,29 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
 
   if (!data) return null;
 
-  const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl, isCommentMode, daysOpen, daysPresent, nextTermBegins } = data;
+  const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl, isCommentMode, daysOpen, daysPresent, nextTermBegins, yearTerms, termOrder, prevTermResults } = data;
+  const isEndOfTerm = resultType === "end_of_term";
   const scoredResults = results.filter((r: any) => !r.did_not_participate);
-  const totalObtainable = scoredResults.length * 30;
+  const hasNewFormat = isEndOfTerm && scoredResults.some((r: any) => r.portfolio_score != null);
+  const outOfPreview = isEndOfTerm ? (hasNewFormat ? 100 : 70) : 30;
+  const totalObtainable = scoredResults.length * outOfPreview;
   const totalObtained = scoredResults.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
+  const totalPct = totalObtainable > 0 ? (totalObtained / totalObtainable) * 100 : 0;
+  const overallGrade = getGradeInfo(totalPct);
   const average = scoredResults.length > 0 ? totalObtained / scoredResults.length : 0;
-  const overallGrade = getGradeInfo(average);
   const studentName = student.full_name || `${student.first_name || ""} ${student.last_name || ""}`.trim();
   const reportLabel = resultType === "mid_term" ? "Mid Term" : "End of Term";
+  // Build per-subject previous term lookup for cumulative display
+  const prevBySubjectPreview: Record<string, number[]> = {};
+  (prevTermResults || []).forEach((pr: any) => {
+    const idx = (yearTerms || []).findIndex((t: any) => t.id === pr.term_id);
+    if (idx < 0) return;
+    if (!prevBySubjectPreview[pr.subject_id]) prevBySubjectPreview[pr.subject_id] = [];
+    prevBySubjectPreview[pr.subject_id][idx] = Number(pr.total_score || 0);
+  });
+  const termNamesPreview = (yearTerms || []).map((t: any) => t.name);
+  const t1LabelPreview = termNamesPreview[0] ? `${termNamesPreview[0]}` : "1st Term";
+  const t2LabelPreview = termNamesPreview[1] ? `${termNamesPreview[1]}` : "2nd Term";
   const dob = student.date_of_birth;
   const age = dob ? `${new Date().getFullYear() - new Date(dob).getFullYear()} yrs` : "—";
 
@@ -448,13 +606,34 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                     </div>
                   ))}
                 </div>
+              ) : isEndOfTerm ? (
+                <div className="flex-1 grid grid-cols-4">
+                  {[
+                    ["Name:", studentName, "Score Obtainable:", totalObtainable],
+                    ["Sex:", student.gender?.toUpperCase() || "—", "Score Obtained:", totalObtained],
+                    ["Class:", student.className, "Term Percentage:", `${totalPct.toFixed(1)}%`],
+                    ["Age:", age, "Term Grade:", null],
+                  ].map(([l1, v1, l2, v2], i) => (
+                    <div key={i} className="contents">
+                      <div className="border-b border-r border-gray-400 px-2 py-1.5 font-semibold">{l1}</div>
+                      <div className="border-b border-r border-gray-400 px-2 py-1.5">{v1}</div>
+                      <div className="border-b border-r border-gray-400 px-2 py-1.5 font-semibold">{l2}</div>
+                      <div className="border-b border-gray-400 px-2 py-1.5">
+                        {(l2 as string).includes("Grade")
+                          ? <span className="font-bold" style={{ color: overallGrade.color }}>{overallGrade.letter} — {overallGrade.remark}</span>
+                          : <span className="italic">{v2}</span>
+                        }
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <div className="flex-1 grid grid-cols-4">
                   {[
-                    ["Name:", studentName, `${reportLabel} Score Obtainable:`, totalObtainable],
-                    ["Sex:", student.gender?.toUpperCase() || "—", `${reportLabel} Score Obtained:`, totalObtained],
-                    ["Class:", student.className, `${reportLabel} Average:`, average.toFixed(2)],
-                    ["Age:", age, `${reportLabel} Grade:`, null],
+                    ["Name:", studentName, "Mid Term Score Obtainable:", totalObtainable],
+                    ["Sex:", student.gender?.toUpperCase() || "—", "Mid Term Score Obtained:", totalObtained],
+                    ["Class:", student.className, "Mid Term Average:", average.toFixed(2)],
+                    ["Age:", age, "Mid Term Grade:", null],
                   ].map(([l1, v1, l2, v2], i) => (
                     <div key={i} className="contents">
                       <div className="border-b border-r border-gray-400 px-2 py-1.5 font-semibold">{l1}</div>
@@ -520,8 +699,117 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                 </table>
               </div>
             </div>
+          ) : isEndOfTerm ? (
+          /* End of Term: full-width subject table + summary row */
+          <>
+            <div className="border-2 border-gray-800 border-t-0 overflow-x-auto">
+              <table className="w-full border-collapse text-[9px]">
+                <thead>
+                  <tr className="bg-blue-100">
+                    <th className="text-left px-2 py-1 border-b border-gray-400 font-semibold min-w-[120px]">SUBJECTS</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Portfolio<br/>&amp; Project<br/>(10)</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Test<br/>Score<br/>(30)</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Exam<br/>Score<br/>(60)</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Total<br/>(100)</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Grade</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Remark</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Highest<br/>in Class</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Lowest<br/>in Class</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">{t1LabelPreview}<br/>(100)</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">{t2LabelPreview}<br/>(100)</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Cumul.<br/>(300)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((r: any, i: number) => {
+                    if (r.did_not_participate) {
+                      return (
+                        <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                          <td className="px-2 py-1 border-b border-gray-200">{r.subjectName}</td>
+                          <td colSpan={11} className="px-1 py-1 border-b border-l border-gray-200 text-center text-gray-400 italic">Did not take part</td>
+                        </tr>
+                      );
+                    }
+                    const total = Number(r.total_score || 0);
+                    const pct = hasNewFormat ? total : (total / 70) * 100;
+                    const g = getGradeInfo(pct);
+                    const stats = subjectStats[r.subject_id];
+                    const portfolio = r.portfolio_score != null ? Number(r.portfolio_score) : "—";
+                    const exam = r.exam_score != null ? Number(r.exam_score) : "—";
+                    const test = (r.portfolio_score != null && r.exam_score != null)
+                      ? Math.max(0, total - Number(r.portfolio_score) - Number(r.exam_score)) : "—";
+                    const prevScores = prevBySubjectPreview[r.subject_id] || [];
+                    const term1 = prevScores[0] != null ? prevScores[0] : "—";
+                    const term2 = prevScores[1] != null ? prevScores[1] : "—";
+                    const cumulative = [term1, term2, total].every(v => v !== "—")
+                      ? Number(term1) + Number(term2) + total : "—";
+                    return (
+                      <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <td className="px-2 py-1 border-b border-gray-200">{r.subjectName}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{String(portfolio)}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{String(test)}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{String(exam)}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center font-bold">{total}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center font-bold" style={{ color: g.color }}>{g.letter}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 font-semibold" style={{ color: g.color }}>{g.remark}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{stats?.highest ?? "—"}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{stats?.lowest ?? "—"}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{String(term1)}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{String(term2)}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center font-bold">{String(cumulative)}</td>
+                      </tr>
+                    );
+                  })}
+                  {!results.length && (
+                    <tr><td colSpan={12} className="px-4 py-6 text-center text-gray-400">No results for this report type.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {/* Attendance + Grade legend */}
+            <div className="border-2 border-gray-800 border-t-0 flex">
+              <div className="flex-1 border-r border-gray-800 p-3">
+                <p className="text-[9px] font-bold mb-1.5 text-gray-700">Attendance</p>
+                <table className="w-full border-collapse text-[9px]">
+                  {[
+                    ["Days School Open:", daysOpen ?? "—"],
+                    ["Days Present:", daysPresent ?? "—"],
+                    ["Days Absent:", daysOpen != null && daysPresent != null ? daysOpen - daysPresent : "—"],
+                    ["Christmas Term Begins:", nextTermBegins ?? "—"],
+                  ].map(([l, v]) => (
+                    <tr key={String(l)} className="border-b border-gray-200">
+                      <td className="py-1 font-semibold pr-2">{l}</td>
+                      <td className="py-1 text-right">{String(v)}</td>
+                    </tr>
+                  ))}
+                </table>
+              </div>
+              <div className="flex-1 p-3">
+                <p className="text-[9px] font-bold mb-1.5 text-gray-700">Cognitive Domain Rating</p>
+                <table className="w-full border-collapse text-[8px]">
+                  <thead><tr className="bg-gray-800 text-white">
+                    <th className="px-1 py-0.5 text-left">Score %</th>
+                    <th className="px-1 py-0.5">Grade</th>
+                    <th className="px-1 py-0.5">Description</th>
+                    <th className="px-1 py-0.5">Colour</th>
+                  </tr></thead>
+                  <tbody>
+                    {GRADE_SCALE.map((g) => (
+                      <tr key={g.letter}>
+                        <td className="border border-gray-300 px-1 py-0.5">{g.range}</td>
+                        <td className="border border-gray-300 px-1 py-0.5 text-center font-bold" style={{ color: g.color }}>{g.letter}</td>
+                        <td className="border border-gray-300 px-1 py-0.5">{g.remark}</td>
+                        <td className="border border-gray-300 px-1 py-0.5 text-center" style={{ background: g.color }}>&nbsp;</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="text-[7px] text-gray-500 mt-1 leading-tight">PTE = PROGRESSING TOWARDS EXPECTATION &nbsp;|&nbsp; NME = NOT MEETING EXPECTATION</p>
+              </div>
+            </div>
+          </>
           ) : (
-          /* Score mode: results table + chart side by side */
+          /* Mid Term: results table + chart side by side */
           <div className="border-2 border-gray-800 border-t-0 flex">
             {/* Subjects table */}
             <div className="flex-1 border-r border-gray-800 overflow-x-auto">
@@ -529,7 +817,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                 <thead>
                   <tr className="bg-blue-100">
                     <th className="text-left px-2 py-1.5 border-b border-gray-400 font-semibold">SUBJECTS</th>
-                    <th className="text-center px-1 py-1.5 border-b border-l border-gray-400 font-semibold">{reportLabel}<br />Total (30)</th>
+                    <th className="text-center px-1 py-1.5 border-b border-l border-gray-400 font-semibold">Mid Term<br />Total (30)</th>
                     <th className="text-center px-1 py-1.5 border-b border-l border-gray-400 font-semibold">Grade</th>
                     <th className="text-center px-1 py-1.5 border-b border-l border-gray-400 font-semibold">Remark</th>
                     <th className="text-center px-1 py-1.5 border-b border-l border-gray-400 font-semibold">Highest Score<br />in Class</th>
@@ -547,7 +835,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                       );
                     }
                     const score = Number(r.total_score || 0);
-                    const g = getGradeInfo(score);
+                    const g = getGradeInfo((score / 30) * 100);
                     const stats = subjectStats[r.subject_id];
                     return (
                       <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
@@ -570,11 +858,11 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
             {/* Chart + grade key */}
             <div className="w-44 p-3 flex flex-col gap-3">
               <div>
-                <p className="text-[9px] font-bold text-center mb-1">{reportLabel} Total (30)</p>
+                <p className="text-[9px] font-bold text-center mb-1">Mid Term Total (30)</p>
                 <div className="flex items-end gap-px border-l border-b border-gray-400 h-16 px-0.5">
                   {scoredResults.map((r: any) => {
                     const score = Number(r.total_score || 0);
-                    const g = getGradeInfo(score);
+                    const g = getGradeInfo((score / 30) * 100);
                     const h = Math.max(2, Math.round((score / 30) * 56));
                     return (
                       <div key={r.id} className="flex flex-col items-center flex-1 min-w-0">
@@ -589,7 +877,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
               <table className="w-full border-collapse text-[8px]">
                 <thead>
                   <tr className="bg-gray-800 text-white">
-                    <th className="px-1 py-0.5 text-left">Score</th>
+                    <th className="px-1 py-0.5 text-left">Score %</th>
                     <th className="px-1 py-0.5">Grade</th>
                     <th className="px-1 py-0.5">Description</th>
                     <th className="px-1 py-0.5">Colour</th>

@@ -2625,13 +2625,22 @@ const ManageParents = () => {
 
       const [profilesRes, linksRes] = await Promise.all([
         supabase.from("profiles").select("user_id, full_name, email, phone, temp_password, created_at").in("user_id", parentIds),
-        supabase.from("parent_students").select("parent_id, student_id, students(id, first_name, last_name, full_name)").in("parent_id", parentIds),
+        supabase.from("parent_students").select("parent_id, student_id").in("parent_id", parentIds),
       ]);
+
+      // Two-step: fetch students by id to avoid PostgREST FK join issues
+      const studentIds = [...new Set((linksRes.data || []).map((l: any) => l.student_id))];
+      let studentsMap: Record<string, any> = {};
+      if (studentIds.length > 0) {
+        const { data: studs } = await supabase.from("students").select("id, first_name, last_name, full_name").in("id", studentIds);
+        (studs || []).forEach((s: any) => { studentsMap[s.id] = s; });
+      }
 
       const childrenByParent: Record<string, any[]> = {};
       (linksRes.data || []).forEach((l: any) => {
         if (!childrenByParent[l.parent_id]) childrenByParent[l.parent_id] = [];
-        if (l.students) childrenByParent[l.parent_id].push(l.students);
+        const student = studentsMap[l.student_id];
+        if (student) childrenByParent[l.parent_id].push(student);
       });
 
       return (profilesRes.data || []).map((p: any) => ({

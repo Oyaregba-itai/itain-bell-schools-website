@@ -1119,10 +1119,10 @@ export const UploadResults = () => {
   const [selSubject, setSelSubject] = useState("");
   const [selTerm, setSelTerm] = useState("");
   const [selType, setSelType] = useState<"mid_term" | "end_of_term">("mid_term");
-  const [scores, setScores] = useState<Record<string, { score: string; comment: string; dnp: boolean }>>({});
+  const [scores, setScores] = useState<Record<string, { score: string; portfolio: string; exam: string; comment: string; dnp: boolean }>>({});
   const [saving, setSaving] = useState(false);
 
-  const outOf = selType === "mid_term" ? 30 : 70;
+  const outOf = selType === "mid_term" ? 30 : 100;
 
   const { data: subjects } = useQuery({
     queryKey: ["my-subjects", user?.id],
@@ -1322,15 +1322,22 @@ export const UploadResults = () => {
             }));
           }
         } else {
-          const scoreVal = parseFloat(entry.score);
-          if (isNaN(scoreVal)) continue;
+          const portfolioVal = parseFloat(entry.portfolio) || 0;
+          const testVal = parseFloat(entry.score) || 0;
+          const examVal = parseFloat(entry.exam) || 0;
+          const scoreVal = selType === "end_of_term" ? portfolioVal + testVal + examVal : testVal;
+          if (selType !== "end_of_term" && isNaN(testVal)) continue;
           const grade = getGradeForScore(scoreVal, outOf);
+          const extraFields = selType === "end_of_term"
+            ? { portfolio_score: portfolioVal, exam_score: examVal }
+            : {};
           if (existing) {
             ({ error } = await supabase.from("results").update({
               did_not_participate: false,
               total_score: scoreVal,
               grade_letter: grade.letter,
               teacher_comments: entry.comment || null,
+              ...extraFields,
             }).eq("id", existing.id));
           } else {
             ({ error } = await supabase.from("results").insert({
@@ -1343,6 +1350,7 @@ export const UploadResults = () => {
               grade_letter: grade.letter,
               teacher_comments: entry.comment || null,
               uploaded_by: user.id,
+              ...extraFields,
             }));
           }
         }
@@ -1372,7 +1380,7 @@ export const UploadResults = () => {
     }
   };
 
-  const filledCount = Object.values(scores).filter(s => classData?.isCommentMode ? !!s.comment : (s.score || s.dnp)).length;
+  const filledCount = Object.values(scores).filter(s => classData?.isCommentMode ? !!s.comment : (s.dnp || s.score || s.portfolio || s.exam)).length;
 
   return (
     <div className="space-y-6">
@@ -1483,8 +1491,15 @@ export const UploadResults = () => {
                   <th className="text-left p-3 font-medium text-muted-foreground">Student</th>
                   {classData.isCommentMode
                     ? <th className="text-left p-3 font-medium text-muted-foreground">Comment</th>
-                    : <>
-                        <th className="text-center p-3 font-medium text-muted-foreground w-36">Score /{outOf}</th>
+                    : selType === "end_of_term" ? <>
+                        <th className="text-center p-3 font-medium text-muted-foreground w-24">Portfolio<br/><span className="text-xs font-normal">/10</span></th>
+                        <th className="text-center p-3 font-medium text-muted-foreground w-24">Test Score<br/><span className="text-xs font-normal">/30</span></th>
+                        <th className="text-center p-3 font-medium text-muted-foreground w-24">Exam Score<br/><span className="text-xs font-normal">/60</span></th>
+                        <th className="text-center p-3 font-medium text-muted-foreground w-20">Total<br/><span className="text-xs font-normal">/100</span></th>
+                        <th className="text-center p-3 font-medium text-muted-foreground w-16">Grade</th>
+                        <th className="text-left p-3 font-medium text-muted-foreground">Comment (optional)</th>
+                      </> : <>
+                        <th className="text-center p-3 font-medium text-muted-foreground w-36">Score /30</th>
                         <th className="text-center p-3 font-medium text-muted-foreground w-20">Grade</th>
                         <th className="text-left p-3 font-medium text-muted-foreground">Comment (optional)</th>
                       </>
@@ -1495,7 +1510,17 @@ export const UploadResults = () => {
               <tbody>
                 {classData.students.map((student: any) => {
                   const existing = classData.existingMap[student.id];
-                  const entry = scores[student.id] || { score: existing && !existing.did_not_participate ? String(existing.total_score ?? "") : "", comment: existing?.teacher_comments || "", dnp: existing?.did_not_participate || false };
+                  const entry = scores[student.id] || {
+                    score: existing && !existing.did_not_participate ? (
+                      selType === "end_of_term" && existing.portfolio_score != null && existing.exam_score != null
+                        ? String(Math.max(0, Number(existing.total_score || 0) - Number(existing.portfolio_score) - Number(existing.exam_score)))
+                        : String(existing.total_score ?? "")
+                    ) : "",
+                    portfolio: existing && !existing.did_not_participate && existing.portfolio_score != null ? String(existing.portfolio_score) : "",
+                    exam: existing && !existing.did_not_participate && existing.exam_score != null ? String(existing.exam_score) : "",
+                    comment: existing?.teacher_comments || "",
+                    dnp: existing?.did_not_participate || false,
+                  };
 
                   if (classData.isCommentMode) {
                     const isDirty = entry.comment !== (existing?.teacher_comments ?? "");
@@ -1529,12 +1554,17 @@ export const UploadResults = () => {
                     );
                   }
 
-                  const scoreNum = parseFloat(entry.score) || 0;
-                  const grade = entry.score && !entry.dnp ? getGradeForScore(scoreNum, outOf) : null;
+                  const portfolioNum = parseFloat(entry.portfolio) || 0;
+                  const testNum = parseFloat(entry.score) || 0;
+                  const examNum = parseFloat(entry.exam) || 0;
+                  const scoreNum = selType === "end_of_term" ? portfolioNum + testNum + examNum : testNum;
+                  const hasAnyScore = selType === "end_of_term"
+                    ? (entry.portfolio || entry.score || entry.exam) : !!entry.score;
+                  const grade = hasAnyScore && !entry.dnp ? getGradeForScore(scoreNum, outOf) : null;
                   const isDirty = entry.dnp
                     ? !existing?.did_not_participate
-                    : entry.score && (String(scoreNum) !== String(existing?.total_score ?? "") || entry.comment !== (existing?.teacher_comments ?? ""));
-                  const toggleDnp = () => setScores(prev => ({ ...prev, [student.id]: { ...entry, dnp: !entry.dnp, score: entry.dnp ? "" : "", comment: "" } }));
+                    : hasAnyScore && (scoreNum !== Number(existing?.total_score ?? "") || entry.comment !== (existing?.teacher_comments ?? ""));
+                  const toggleDnp = () => setScores(prev => ({ ...prev, [student.id]: { ...entry, dnp: !entry.dnp, score: "", portfolio: "", exam: "", comment: "" } }));
                   return (
                     <tr key={student.id} className={`border-t border-border transition-colors ${entry.dnp ? "bg-muted/40" : isDirty ? "bg-primary/5" : ""}`}>
                       <td className="p-3">
@@ -1545,6 +1575,31 @@ export const UploadResults = () => {
                           <span className={`font-medium ${entry.dnp ? "text-muted-foreground line-through" : "text-foreground"}`}>{student.full_name}</span>
                         </div>
                       </td>
+                      {selType === "end_of_term" ? <>
+                        <td className="p-2">
+                          {entry.dnp ? <span className="text-muted-foreground text-sm italic text-center block">—</span>
+                            : <Input type="number" step="0.5" min="0" max="10" value={entry.portfolio}
+                                onChange={e => setScores(prev => ({ ...prev, [student.id]: { ...entry, portfolio: e.target.value } }))}
+                                className="h-8 text-sm text-center w-full" placeholder="0–10" />}
+                        </td>
+                        <td className="p-2">
+                          {entry.dnp ? <span className="text-muted-foreground text-sm italic text-center block">—</span>
+                            : <Input type="number" step="0.5" min="0" max="30" value={entry.score}
+                                onChange={e => setScores(prev => ({ ...prev, [student.id]: { ...entry, score: e.target.value } }))}
+                                className="h-8 text-sm text-center w-full" placeholder="0–30" />}
+                        </td>
+                        <td className="p-2">
+                          {entry.dnp ? <span className="text-muted-foreground text-sm italic text-center block">—</span>
+                            : <Input type="number" step="0.5" min="0" max="60" value={entry.exam}
+                                onChange={e => setScores(prev => ({ ...prev, [student.id]: { ...entry, exam: e.target.value } }))}
+                                className="h-8 text-sm text-center w-full" placeholder="0–60" />}
+                        </td>
+                        <td className="p-2 text-center">
+                          {entry.dnp ? <span className="text-xs text-muted-foreground">N/A</span>
+                            : hasAnyScore ? <span className="text-sm font-bold">{scoreNum}</span>
+                            : <span className="text-muted-foreground text-xs">—</span>}
+                        </td>
+                      </> : (
                       <td className="p-3">
                         {entry.dnp
                           ? <span className="text-muted-foreground text-sm italic">—</span>
@@ -1552,14 +1607,15 @@ export const UploadResults = () => {
                               type="number"
                               step="0.5"
                               min="0"
-                              max={outOf}
+                              max={30}
                               value={entry.score}
                               onChange={e => setScores(prev => ({ ...prev, [student.id]: { ...entry, score: e.target.value } }))}
                               className="h-8 text-sm text-center w-full"
-                              placeholder={`0–${outOf}`}
+                              placeholder="0–30"
                             />
                         }
                       </td>
+                      )}
                       <td className="p-3 text-center">
                         {entry.dnp
                           ? <span className="text-xs text-muted-foreground">N/A</span>
