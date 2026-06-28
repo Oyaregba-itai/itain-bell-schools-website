@@ -50,10 +50,12 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
       let headTeacherSignatureUrl = "";
       let headOfSchoolSignatureUrl = "";
       let isCommentMode = false;
+      let isHybridMode = false;
       if (studentRes.data?.class_id) {
         const { data: cls } = await supabase.from("classes").select("name, head_teacher_id, report_format").eq("id", studentRes.data.class_id).single();
         className = cls?.name || "—";
         isCommentMode = cls?.report_format === "comment";
+        isHybridMode = cls?.report_format === "hybrid";
         if (cls?.head_teacher_id) {
           const { data: headProfile } = await supabase.from("profiles").select("full_name, signature_url").eq("user_id", cls.head_teacher_id).maybeSingle();
           headTeacherName = headProfile?.full_name || "";
@@ -127,6 +129,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
         headTeacherSignatureUrl,
         headOfSchoolSignatureUrl,
         isCommentMode: isCommentMode ?? false,
+        isHybridMode: isHybridMode ?? false,
         daysOpen: submissionRes.data?.days_open ?? null,
         daysPresent: submissionRes.data?.days_present ?? null,
         nextTermBegins: submissionRes.data?.next_term_begins ?? null,
@@ -171,7 +174,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
 
   const handlePrint = () => {
     if (!data) return;
-    const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl, isCommentMode, daysOpen, daysPresent, nextTermBegins, yearTerms, termOrder, prevTermResults } = data;
+    const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl, isCommentMode, isHybridMode, daysOpen, daysPresent, nextTermBegins, yearTerms, termOrder, prevTermResults } = data;
     const isEndOfTerm = resultType === "end_of_term";
     const scoredResults = results.filter((r: any) => !r.did_not_participate);
     const hasNewFormat = isEndOfTerm && scoredResults.some((r: any) => r.portfolio_score != null);
@@ -379,7 +382,91 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
     const t1Label = termNames[0] ? `${termNames[0]} Score` : "1st Term";
     const t2Label = termNames[1] ? `${termNames[1]} Score` : "2nd Term";
 
-    const htmlBody = isEndOfTerm ? `
+    // Build per-subject comments for hybrid mode
+    const subjectCommentRows = results
+      .filter((r: any) => r.teacher_comments)
+      .map((r: any, i: number) => {
+        const bg = i % 2 === 0 ? "#fff" : "#f8f9fa";
+        return `<tr style="background:${bg}">
+          <td style="padding:4px 8px;border-bottom:1px solid #eee;font-weight:bold;white-space:nowrap;width:22%">${r.subjectName}</td>
+          <td style="padding:4px 8px;border-bottom:1px solid #eee">${r.teacher_comments}</td>
+        </tr>`;
+      }).join("");
+
+    const hybridSubjectTableHeader = `<tr style="background:#d6e8f7;font-size:8.5px">
+        <th style="padding:3px 5px;border:1px solid #bbb;text-align:left">SUBJECTS</th>
+        <th style="padding:3px 3px;border:1px solid #bbb;text-align:center">Assignment<br>Score (10)</th>
+        <th style="padding:3px 3px;border:1px solid #bbb;text-align:center">Test<br>Score (30)</th>
+        <th style="padding:3px 3px;border:1px solid #bbb;text-align:center">Exam<br>Score (60)</th>
+        <th style="padding:3px 3px;border:1px solid #bbb;text-align:center">Total<br>(100)</th>
+        <th style="padding:3px 3px;border:1px solid #bbb;text-align:center">Grade</th>
+        <th style="padding:3px 3px;border:1px solid #bbb;text-align:center">Remark</th>
+        <th style="padding:3px 3px;border:1px solid #bbb;text-align:center">Highest Score<br>Obtained in<br>Class</th>
+        <th style="padding:3px 3px;border:1px solid #bbb;text-align:center">Lowest<br>Score<br>Obtained<br>in Class</th>
+        <th style="padding:3px 3px;border:1px solid #bbb;text-align:center">First Term<br>(100)</th>
+        <th style="padding:3px 3px;border:1px solid #bbb;text-align:center">Second<br>Term<br>(100)</th>
+        <th style="padding:3px 3px;border:1px solid #bbb;text-align:center">Cummulative<br>Total (300)</th>
+      </tr>`;
+
+    const showHybrid = isHybridMode && isEndOfTerm;
+    const htmlBody = showHybrid ? `
+    ${sharedHeader}
+    <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
+      <td style="border:1px solid #333;padding:4px;text-align:center;width:70px;vertical-align:middle" rowspan="4">
+        ${photoUrl ? `<img src="${photoUrl}" style="width:60px;height:75px;object-fit:cover">` : `<div style="width:60px;height:75px;background:#eee;font-size:8px;color:#999;text-align:center">No Photo</div>`}
+      </td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Name:</td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">${studentName}</td>
+      <td style="border:1px solid #333;padding:3px 6px" colspan="3"></td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold;width:28%">Term Overall Score Obtainable:</td>
+      <td style="border:1px solid #333;padding:3px 6px;font-style:italic;width:12%">${totalObtainable}</td></tr><tr>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Sex:</td>
+      <td style="border:1px solid #333;padding:3px 6px">${gender}</td>
+      <td colspan="3"></td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Term Overall Score Obtained:</td>
+      <td style="border:1px solid #333;padding:3px 6px;font-style:italic">${totalObtained}</td></tr><tr>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Class:</td>
+      <td style="border:1px solid #333;padding:3px 6px">${student.className}</td>
+      <td colspan="3"></td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Term Percentage:</td>
+      <td style="border:1px solid #333;padding:3px 6px;font-style:italic">${totalPct.toFixed(1)}</td></tr><tr>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Age:</td>
+      <td style="border:1px solid #333;padding:3px 6px">${age}</td>
+      <td colspan="3"></td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold">Term Grade:</td>
+      <td style="border:1px solid #333;padding:3px 6px;font-weight:bold;color:${overallGrade.color}">${overallGrade.letter}</td>
+    </tr></table>
+    <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
+      <td colspan="2" style="border:1px solid #333;padding:4px;text-align:center;font-weight:bold;background:#ebebeb;font-size:10px">
+        ACADEMICS (COGNITIVE DOMAIN) FOR ${termName.toUpperCase()} REPORT SHEET ${session} SESSION
+      </td>
+    </tr></table>
+    <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
+      <td style="border-right:1px solid #333;padding:0;vertical-align:top;width:68%">
+        <table style="width:100%;border-collapse:collapse"><thead>${hybridSubjectTableHeader}</thead>
+          <tbody style="font-size:9px">${subjectRows}</tbody>
+        </table>
+        ${subjectCommentRows ? `<table style="width:100%;border-collapse:collapse;font-size:9px;border-top:1px solid #ccc"><tbody>${subjectCommentRows}</tbody></table>` : ""}
+      </td>
+      <td style="vertical-align:top;padding:8px;width:32%">
+        <table style="width:100%;border-collapse:collapse;font-size:9px;margin-bottom:6px">
+          <tr><td style="padding:3px 0;font-weight:bold">Days School Open</td><td style="text-align:right">${daysOpen ?? "—"}</td></tr>
+          <tr><td style="padding:3px 0;font-weight:bold">DaysPresent</td><td style="text-align:right">${daysPresent ?? "—"}</td></tr>
+          <tr><td style="padding:3px 0;font-weight:bold">Days Absent</td><td style="text-align:right">${daysAbsent2}</td></tr>
+        </table>
+        <div style="background:#e65100;color:white;text-align:center;font-weight:bold;font-size:9px;padding:3px;margin-bottom:2px">${termName.toUpperCase()} TERM BEGINS</div>
+        <div style="text-align:center;font-size:9px;font-weight:bold;margin-bottom:6px">${nextTermBegins ?? "—"}</div>
+        <div style="display:flex;align-items:flex-end;height:80px;gap:1px;border-left:1px solid #999;border-bottom:1px solid #999;padding:0 2px;margin-bottom:4px">${bars}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:7.5px">
+          <thead><tr style="background:#333;color:white">
+            <th style="padding:2px 3px">Score</th><th style="padding:2px 3px">Grade</th>
+            <th style="padding:2px 3px">Description</th><th style="padding:2px 3px">Colour</th>
+          </tr></thead><tbody>${gradeKeyRows}</tbody>
+        </table>
+        <div style="font-size:7px;margin-top:2px;color:#444">PTE: PROGRESSING TOWARDS EXPECTATION<br>NME: NOT MEETING EXPECTATION</div>
+      </td>
+    </tr></table>
+    ${sharedComments}` : isEndOfTerm ? `
     ${sharedHeader}
     <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
       <td style="border:1px solid #333;padding:4px;text-align:center;width:70px;vertical-align:middle" rowspan="4">
@@ -519,7 +606,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
 
   if (!data) return null;
 
-  const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl, isCommentMode, daysOpen, daysPresent, nextTermBegins, yearTerms, termOrder, prevTermResults } = data;
+  const { student, term, results, subjectStats, headTeacherComment, headOfSchoolComment, headTeacherName, headTeacherSignatureUrl, headOfSchoolSignatureUrl, isCommentMode, isHybridMode, daysOpen, daysPresent, nextTermBegins, yearTerms, termOrder, prevTermResults } = data;
   const isEndOfTerm = resultType === "end_of_term";
   const scoredResults = results.filter((r: any) => !r.did_not_participate);
   const hasNewFormat = isEndOfTerm && scoredResults.some((r: any) => r.portfolio_score != null);
@@ -606,10 +693,10 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                     </div>
                   ))}
                 </div>
-              ) : isEndOfTerm ? (
+              ) : (isEndOfTerm || (isHybridMode && isEndOfTerm)) ? (
                 <div className="flex-1 grid grid-cols-4">
                   {[
-                    ["Name:", studentName, "Score Obtainable:", totalObtainable],
+                    ["Name:", studentName, isHybridMode ? "Term Overall Score Obtainable:" : "Score Obtainable:", totalObtainable],
                     ["Sex:", student.gender?.toUpperCase() || "—", "Score Obtained:", totalObtained],
                     ["Class:", student.className, "Term Percentage:", `${totalPct.toFixed(1)}%`],
                     ["Age:", age, "Term Grade:", null],
@@ -699,6 +786,136 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                 </table>
               </div>
             </div>
+          ) : isHybridMode && isEndOfTerm ? (
+          /* Hybrid (Discoverers/Nobles): scores + subject comments on left, attendance + chart + legend on right */
+          <div className="border-2 border-gray-800 border-t-0 flex">
+            {/* Left: scores table + subject comments */}
+            <div className="flex-[2] border-r border-gray-800 flex flex-col overflow-x-auto">
+              <table className="w-full border-collapse text-[8.5px]">
+                <thead>
+                  <tr className="bg-blue-100">
+                    <th className="text-left px-2 py-1 border-b border-gray-400 font-semibold min-w-[100px]">SUBJECTS</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Assignment<br/>Score (10)</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Test<br/>Score (30)</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Exam<br/>Score (60)</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Total<br/>(100)</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Grade</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Remark</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Highest<br/>in Class</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Lowest<br/>in Class</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">First Term<br/>(100)</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Second<br/>Term (100)</th>
+                    <th className="text-center px-1 py-1 border-b border-l border-gray-400 font-semibold">Cummulative<br/>Total (300)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((r: any, i: number) => {
+                    if (r.did_not_participate) {
+                      return (
+                        <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                          <td className="px-2 py-1 border-b border-gray-200">{r.subjectName}</td>
+                          <td colSpan={11} className="px-1 py-1 border-b border-l border-gray-200 text-center text-gray-400 italic">Did not take part</td>
+                        </tr>
+                      );
+                    }
+                    const total = Number(r.total_score || 0);
+                    const pct = hasNewFormat ? total : (total / 70) * 100;
+                    const g = getGradeInfo(pct);
+                    const stats = subjectStats[r.subject_id];
+                    const portfolio = r.portfolio_score != null ? Number(r.portfolio_score) : "—";
+                    const exam = r.exam_score != null ? Number(r.exam_score) : "—";
+                    const test = (r.portfolio_score != null && r.exam_score != null)
+                      ? Math.max(0, total - Number(r.portfolio_score) - Number(r.exam_score)) : "—";
+                    const prevScores = prevBySubjectPreview[r.subject_id] || [];
+                    const term1 = prevScores[0] != null ? prevScores[0] : "—";
+                    const term2 = prevScores[1] != null ? prevScores[1] : "—";
+                    const cumulative = [term1, term2, total].every(v => v !== "—")
+                      ? Number(term1) + Number(term2) + total : "—";
+                    return (
+                      <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                        <td className="px-2 py-1 border-b border-gray-200">{r.subjectName}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{String(portfolio)}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{String(test)}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{String(exam)}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center font-bold">{total}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center font-bold" style={{ color: g.color }}>{g.letter}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 font-semibold" style={{ color: g.color }}>{g.remark}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{stats?.highest ?? "—"}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{stats?.lowest ?? "—"}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{String(term1)}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center">{String(term2)}</td>
+                        <td className="px-1 py-1 border-b border-l border-gray-200 text-center font-bold">{String(cumulative)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {/* Subject comments */}
+              {results.some((r: any) => r.teacher_comments) && (
+                <div className="border-t border-gray-300 text-[9px]">
+                  {results.filter((r: any) => r.teacher_comments).map((r: any, i: number) => (
+                    <div key={r.id} className={`flex gap-2 px-2 py-1 border-b border-gray-200 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
+                      <span className="font-bold min-w-[90px] shrink-0">{r.subjectName}</span>
+                      <span className="text-gray-700">{r.teacher_comments}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* Right: attendance + next term begins + chart + grade legend */}
+            <div className="w-44 shrink-0 p-3 flex flex-col gap-2">
+              <table className="w-full border-collapse text-[8px]">
+                <tbody>
+                  {[
+                    ["Days School Open", daysOpen ?? "—"],
+                    ["DaysPresent", daysPresent ?? "—"],
+                    ["Days Absent", daysOpen != null && daysPresent != null ? daysOpen - daysPresent : "—"],
+                  ].map(([l, v]) => (
+                    <tr key={String(l)} className="border-b border-gray-200">
+                      <td className="py-1 font-semibold pr-1">{l}</td>
+                      <td className="py-1 text-right">{String(v)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="bg-orange-700 text-white text-center font-bold text-[7px] py-1">{(term as any)?.name?.toUpperCase()} TERM BEGINS</div>
+              {nextTermBegins && <p className="text-center font-bold text-[8px]">{nextTermBegins}</p>}
+              <div className="flex items-end gap-px border-l border-b border-gray-400 h-16 px-0.5">
+                {scoredResults.map((r: any) => {
+                  const score = Number(r.total_score || 0);
+                  const pct = hasNewFormat ? score : (score / 70) * 100;
+                  const g = getGradeInfo(pct);
+                  const h = Math.max(2, Math.round((pct / 100) * 52));
+                  return (
+                    <div key={r.id} className="flex flex-col items-center flex-1 min-w-0">
+                      <span className="text-[5px] leading-none mb-px">{score}</span>
+                      <div className="w-full min-h-[2px]" style={{ height: h, backgroundColor: g.color }} />
+                      <span className="text-[5px] mt-px overflow-hidden whitespace-nowrap text-center w-full">{r.subjectName.substring(0, 5)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <table className="w-full border-collapse text-[7px]">
+                <thead><tr className="bg-gray-800 text-white">
+                  <th className="px-1 py-0.5 text-left">Score</th>
+                  <th className="px-1 py-0.5">Grade</th>
+                  <th className="px-1 py-0.5">Description</th>
+                  <th className="px-1 py-0.5">Colour</th>
+                </tr></thead>
+                <tbody>
+                  {GRADE_SCALE.map((g) => (
+                    <tr key={g.letter}>
+                      <td className="border border-gray-300 px-0.5 py-0.5">{g.range}</td>
+                      <td className="border border-gray-300 px-0.5 py-0.5 text-center font-bold" style={{ color: g.color }}>{g.letter}</td>
+                      <td className="border border-gray-300 px-0.5 py-0.5">{g.remark}</td>
+                      <td className="border border-gray-300 px-0.5 py-0.5" style={{ background: g.color }}>&nbsp;</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="text-[6px] text-gray-500 leading-tight">PTE: PROGRESSING TOWARDS EXPECTATION | NME: NOT MEETING EXPECTATION</p>
+            </div>
+          </div>
           ) : isEndOfTerm ? (
           /* End of Term: full-width subject table + summary row */
           <>
