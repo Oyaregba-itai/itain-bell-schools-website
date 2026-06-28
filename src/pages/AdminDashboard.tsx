@@ -1786,8 +1786,8 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
       });
       if (linkError) throw linkError;
 
-      // Store password so admin can look it up later from the Parents page
-      await supabase.from("profiles").update({ temp_password: password }).eq("user_id", result.user.id);
+      // Store password and email so admin can look them up from the Parents page
+      await supabase.from("profiles").update({ temp_password: password, email: parentForm.email }).eq("user_id", result.user.id);
 
       setCreatedParent({ email: parentForm.email, password });
       setParentForm({ full_name: "", email: "", phone: "" });
