@@ -1243,6 +1243,24 @@ export const UploadResults = () => {
     }
   }, [terms, selTerm]);
 
+  // Pre-fill test scores from mid-term when switching to end-of-term entry
+  useEffect(() => {
+    if (!classData || selType !== "end_of_term") return;
+    setScores(prev => {
+      const next = { ...prev };
+      let changed = false;
+      for (const student of classData.students) {
+        if (next[student.id]) continue;
+        const midTerm = classData.midTermMap?.[student.id];
+        if (midTerm && !midTerm.did_not_participate && midTerm.total_score != null) {
+          next[student.id] = { score: String(midTerm.total_score), portfolio: "", exam: "", comment: "", dnp: false };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [classData, selType]);
+
   const selectedSubject = subjects?.find((s: any) => s.key === selSubject);
 
   const { data: classData } = useQuery({
@@ -1252,15 +1270,20 @@ export const UploadResults = () => {
       const { data: students } = await supabase.from("students").select("*").eq("class_id", selectedSubject?.class_id).order("full_name");
       const studentList = students || [];
       const studentIds = studentList.map((s: any) => s.id);
-      const [existingRes, clsRes] = await Promise.all([
+      const [existingRes, clsRes, midTermRes] = await Promise.all([
         studentIds.length > 0
           ? supabase.from("results").select("*").eq("subject_id", selectedSubject?.id).eq("term_id", selTerm).eq("result_type", selType).in("student_id", studentIds)
           : Promise.resolve({ data: [] as any[] }),
         supabase.from("classes").select("report_format").eq("id", selectedSubject?.class_id).single(),
+        selType === "end_of_term" && studentIds.length > 0
+          ? supabase.from("results").select("student_id, total_score, did_not_participate").eq("subject_id", selectedSubject?.id).eq("term_id", selTerm).eq("result_type", "mid_term").in("student_id", studentIds)
+          : Promise.resolve({ data: [] as any[] }),
       ]);
       const existingMap: Record<string, any> = {};
       (existingRes.data || []).forEach((r: any) => { existingMap[r.student_id] = r; });
-      return { students: studentList, existingMap, isCommentMode: clsRes.data?.report_format === "comment" };
+      const midTermMap: Record<string, any> = {};
+      ((midTermRes as any).data || []).forEach((r: any) => { midTermMap[r.student_id] = r; });
+      return { students: studentList, existingMap, midTermMap, isCommentMode: clsRes.data?.report_format === "comment" };
     },
   });
 
@@ -1417,7 +1440,7 @@ export const UploadResults = () => {
           {(["mid_term", "end_of_term"] as const).map(t => (
             <button key={t} onClick={() => { setSelType(t); setScores({}); }}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${selType === t ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-              {t === "mid_term" ? "Mid Term (out of 30)" : "End of Term (out of 70)"}
+              {t === "mid_term" ? "Mid Term (out of 30)" : "End of Term (out of 100)"}
             </button>
           ))}
         </div>
@@ -1493,7 +1516,7 @@ export const UploadResults = () => {
                     ? <th className="text-left p-3 font-medium text-muted-foreground">Comment</th>
                     : selType === "end_of_term" ? <>
                         <th className="text-center p-3 font-medium text-muted-foreground w-24">Portfolio<br/><span className="text-xs font-normal">/10</span></th>
-                        <th className="text-center p-3 font-medium text-muted-foreground w-24">Test Score<br/><span className="text-xs font-normal">/30</span></th>
+                        <th className="text-center p-3 font-medium text-muted-foreground w-24">Test Score<br/><span className="text-xs font-normal">/30 (mid-term)</span></th>
                         <th className="text-center p-3 font-medium text-muted-foreground w-24">Exam Score<br/><span className="text-xs font-normal">/60</span></th>
                         <th className="text-center p-3 font-medium text-muted-foreground w-20">Total<br/><span className="text-xs font-normal">/100</span></th>
                         <th className="text-center p-3 font-medium text-muted-foreground w-16">Grade</th>
@@ -1521,6 +1544,9 @@ export const UploadResults = () => {
                     comment: existing?.teacher_comments || "",
                     dnp: existing?.did_not_participate || false,
                   };
+
+                  const midTermResult = classData.midTermMap?.[student.id];
+                  const isTestAutoFilled = !existing && midTermResult && !midTermResult.did_not_participate;
 
                   if (classData.isCommentMode) {
                     const isDirty = entry.comment !== (existing?.teacher_comments ?? "");
@@ -1586,7 +1612,8 @@ export const UploadResults = () => {
                           {entry.dnp ? <span className="text-muted-foreground text-sm italic text-center block">—</span>
                             : <Input type="number" step="0.5" min="0" max="30" value={entry.score}
                                 onChange={e => setScores(prev => ({ ...prev, [student.id]: { ...entry, score: e.target.value } }))}
-                                className="h-8 text-sm text-center w-full" placeholder="0–30" />}
+                                className={`h-8 text-sm text-center w-full ${isTestAutoFilled ? "bg-blue-50 border-blue-200 text-blue-800" : ""}`}
+                                placeholder="0–30" title={isTestAutoFilled ? "Auto-filled from mid-term result" : undefined} />}
                         </td>
                         <td className="p-2">
                           {entry.dnp ? <span className="text-muted-foreground text-sm italic text-center block">—</span>
