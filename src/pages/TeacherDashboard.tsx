@@ -1243,24 +1243,6 @@ export const UploadResults = () => {
     }
   }, [terms, selTerm]);
 
-  // Pre-fill test scores from mid-term when switching to end-of-term entry
-  useEffect(() => {
-    if (!classData || selType !== "end_of_term") return;
-    setScores(prev => {
-      const next = { ...prev };
-      let changed = false;
-      for (const student of classData.students) {
-        if (next[student.id]) continue;
-        const midTerm = classData.midTermMap?.[student.id];
-        if (midTerm && !midTerm.did_not_participate && midTerm.total_score != null) {
-          next[student.id] = { score: String(midTerm.total_score), portfolio: "", exam: "", comment: "", dnp: false };
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [classData, selType]);
-
   const selectedSubject = subjects?.find((s: any) => s.key === selSubject);
 
   const { data: classData } = useQuery({
@@ -1286,6 +1268,24 @@ export const UploadResults = () => {
       return { students: studentList, existingMap, midTermMap, isCommentMode: clsRes.data?.report_format === "comment" };
     },
   });
+
+  // Pre-fill test scores from mid-term when switching to end-of-term entry
+  useEffect(() => {
+    if (!classData || selType !== "end_of_term") return;
+    setScores(prev => {
+      const next = { ...prev };
+      let changed = false;
+      for (const student of classData.students) {
+        if (next[student.id]) continue;
+        const midTerm = classData.midTermMap?.[student.id];
+        if (midTerm && !midTerm.did_not_participate && midTerm.total_score != null) {
+          next[student.id] = { score: String(midTerm.total_score), portfolio: "", exam: "", comment: "", dnp: false };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [classData, selType]);
 
   // Initialise scores when data loads
   const initDone = !!(classData && selSubject && selTerm);
