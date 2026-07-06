@@ -57,6 +57,14 @@ const Footer = () => {
                 <MapPin size={16} className="mt-0.5 shrink-0 text-secondary" />
                 <span>7, Mustapha Street, Off Olanrewaju/Olayiwola Street, Oregun, Ikeja, Lagos.</span>
               </li>
+              <li className="flex items-start gap-2">
+                <Phone size={16} className="mt-0.5 shrink-0 text-secondary" />
+                <div className="space-y-1">
+                  <a href="tel:08021421858" className="block hover:text-primary-foreground transition-colors">08021421858</a>
+                  <a href="tel:08037144152" className="block hover:text-primary-foreground transition-colors">08037144152</a>
+                  <a href="tel:08188902673" className="block hover:text-primary-foreground transition-colors">08188902673</a>
+                </div>
+              </li>
               <li className="flex items-center gap-2">
                 <Mail size={16} className="shrink-0 text-secondary" />
                 <a href="mailto:info@itainbellschool.com" className="hover:text-primary-foreground transition-colors">info@itainbellschool.com</a>
