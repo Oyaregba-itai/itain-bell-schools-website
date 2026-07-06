@@ -29,6 +29,9 @@ const GRADE_SCALE = [
 const getGradeInfo = (pct: number) =>
   GRADE_SCALE.find((g) => pct >= g.min && pct <= g.max) ?? GRADE_SCALE[GRADE_SCALE.length - 1];
 
+// Round to 1 decimal place, removing trailing zero (24.5000…7 → 24.5, 24.0 → 24)
+const rnd1 = (n: number) => parseFloat(n.toFixed(1));
+
 const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint }: ReportCardProps) => {
   const autoPrinted = useRef(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -223,7 +226,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
         const portfolio = r.portfolio_score != null ? Number(r.portfolio_score) : "—";
         const exam = r.exam_score != null ? Number(r.exam_score) : "—";
         const test = (r.portfolio_score != null && r.exam_score != null)
-          ? Math.max(0, total - Number(r.portfolio_score) - Number(r.exam_score))
+          ? rnd1(Math.max(0, total - Number(r.portfolio_score) - Number(r.exam_score)))
           : "—";
         const prevScores = prevBySubject[r.subject_id] || [];
         const term1 = prevScores[0] != null ? prevScores[0] : "—";
@@ -825,7 +828,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                     const portfolio = r.portfolio_score != null ? Number(r.portfolio_score) : "—";
                     const exam = r.exam_score != null ? Number(r.exam_score) : "—";
                     const test = (r.portfolio_score != null && r.exam_score != null)
-                      ? Math.max(0, total - Number(r.portfolio_score) - Number(r.exam_score)) : "—";
+                      ? rnd1(Math.max(0, total - Number(r.portfolio_score) - Number(r.exam_score))) : "—";
                     const prevScores = prevBySubjectPreview[r.subject_id] || [];
                     const term1 = prevScores[0] != null ? prevScores[0] : "—";
                     const term2 = prevScores[1] != null ? prevScores[1] : "—";
@@ -954,7 +957,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                     const portfolio = r.portfolio_score != null ? Number(r.portfolio_score) : "—";
                     const exam = r.exam_score != null ? Number(r.exam_score) : "—";
                     const test = (r.portfolio_score != null && r.exam_score != null)
-                      ? Math.max(0, total - Number(r.portfolio_score) - Number(r.exam_score)) : "—";
+                      ? rnd1(Math.max(0, total - Number(r.portfolio_score) - Number(r.exam_score))) : "—";
                     const prevScores = prevBySubjectPreview[r.subject_id] || [];
                     const term1 = prevScores[0] != null ? prevScores[0] : "—";
                     const term2 = prevScores[1] != null ? prevScores[1] : "—";

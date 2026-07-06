@@ -1536,7 +1536,7 @@ export const UploadResults = () => {
                   const entry = scores[student.id] || {
                     score: existing && !existing.did_not_participate ? (
                       selType === "end_of_term" && existing.portfolio_score != null && existing.exam_score != null
-                        ? String(Math.max(0, Number(existing.total_score || 0) - Number(existing.portfolio_score) - Number(existing.exam_score)))
+                        ? String(parseFloat(Math.max(0, Number(existing.total_score || 0) - Number(existing.portfolio_score) - Number(existing.exam_score)).toFixed(1)))
                         : String(existing.total_score ?? "")
                     ) : "",
                     portfolio: existing && !existing.did_not_participate && existing.portfolio_score != null ? String(existing.portfolio_score) : "",
