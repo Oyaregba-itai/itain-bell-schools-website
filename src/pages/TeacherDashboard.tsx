@@ -1122,7 +1122,7 @@ export const UploadResults = () => {
   const [selSubject, setSelSubject] = useState("");
   const [selTerm, setSelTerm] = useState("");
   const [selType, setSelType] = useState<"mid_term" | "end_of_term">("mid_term");
-  const [scores, setScores] = useState<Record<string, { score: string; portfolio: string; exam: string; comment: string; dnp: boolean }>>({});
+  const [scores, setScores] = useState<Record<string, { score: string; portfolio: string; exam: string; comment: string; dnp: boolean; prevTermScores?: Record<string, string> }>>({});
   const [saving, setSaving] = useState(false);
 
   const outOf = selType === "mid_term" ? 30 : 100;
@@ -1268,21 +1268,61 @@ export const UploadResults = () => {
       (existingRes.data || []).forEach((r: any) => { existingMap[r.student_id] = r; });
       const midTermMap: Record<string, any> = {};
       ((midTermRes as any).data || []).forEach((r: any) => { midTermMap[r.student_id] = r; });
-      return { students: studentList, existingMap, midTermMap, isCommentMode: clsRes.data?.report_format === "comment" };
+
+      // Fetch previous terms in the same academic year for cumulative score entry
+      let prevTerms: any[] = [];
+      let prevTermMaps: Record<string, Record<string, any>> = {};
+      if (selType === "end_of_term" && studentIds.length > 0) {
+        const { data: termInfo } = await supabase.from("terms").select("academic_year").eq("id", selTerm).single();
+        if (termInfo) {
+          const { data: yearTerms } = await supabase.from("terms")
+            .select("id, name, start_date")
+            .eq("academic_year", termInfo.academic_year)
+            .order("start_date", { ascending: true });
+          const termIdx = (yearTerms || []).findIndex((t: any) => t.id === selTerm);
+          prevTerms = termIdx > 0 ? (yearTerms || []).slice(0, termIdx) : [];
+          if (prevTerms.length > 0) {
+            const prevTermIds = prevTerms.map((t: any) => t.id);
+            const { data: prevResults } = await supabase.from("results")
+              .select("id, student_id, term_id, total_score, did_not_participate")
+              .eq("subject_id", selectedSubject?.id)
+              .eq("result_type", "end_of_term")
+              .in("term_id", prevTermIds)
+              .in("student_id", studentIds);
+            prevTerms.forEach((pt: any) => { prevTermMaps[pt.id] = {}; });
+            (prevResults || []).forEach((r: any) => {
+              if (prevTermMaps[r.term_id]) prevTermMaps[r.term_id][r.student_id] = r;
+            });
+          }
+        }
+      }
+
+      return { students: studentList, existingMap, midTermMap, isCommentMode: clsRes.data?.report_format === "comment", prevTerms, prevTermMaps };
     },
   });
 
-  // Pre-fill test scores from mid-term when switching to end-of-term entry
+  // Pre-fill test scores from mid-term and previous term scores when entering end-of-term results
   useEffect(() => {
     if (!classData || selType !== "end_of_term") return;
     setScores(prev => {
       const next = { ...prev };
       let changed = false;
       for (const student of classData.students) {
-        if (next[student.id]) continue;
+        const existing = next[student.id];
         const midTerm = classData.midTermMap?.[student.id];
-        if (midTerm && !midTerm.did_not_participate && midTerm.total_score != null) {
-          next[student.id] = { score: String(midTerm.total_score), portfolio: "", exam: "", comment: "", dnp: false };
+        const prevTermScores: Record<string, string> = {};
+        for (const pt of (classData.prevTerms || [])) {
+          const ptResult = classData.prevTermMaps?.[pt.id]?.[student.id];
+          prevTermScores[pt.id] = (ptResult && !ptResult.did_not_participate && ptResult.total_score != null)
+            ? String(ptResult.total_score) : "";
+        }
+        if (!existing) {
+          const testScore = (midTerm && !midTerm.did_not_participate && midTerm.total_score != null)
+            ? String(midTerm.total_score) : "";
+          next[student.id] = { score: testScore, portfolio: "", exam: "", comment: "", dnp: false, prevTermScores };
+          changed = true;
+        } else if (!existing.prevTermScores) {
+          next[student.id] = { ...existing, prevTermScores };
           changed = true;
         }
       }
@@ -1388,6 +1428,32 @@ export const UploadResults = () => {
         lastError = error.message || String(error);
       } else {
         saved++;
+      }
+
+      // Save previous term scores if entered (end_of_term only)
+      if (selType === "end_of_term") {
+        for (const pt of (classData.prevTerms || [])) {
+          const ptScore = entry?.prevTermScores?.[pt.id];
+          if (!ptScore) continue;
+          const ptVal = parseFloat(ptScore);
+          if (isNaN(ptVal)) continue;
+          const ptGrade = getGradeForScore(ptVal, 100);
+          const existingPt = classData.prevTermMaps?.[pt.id]?.[student.id];
+          try {
+            if (existingPt) {
+              await supabase.from("results").update({
+                total_score: ptVal, grade_letter: ptGrade.letter, did_not_participate: false,
+              }).eq("id", existingPt.id);
+            } else {
+              await supabase.from("results").insert({
+                student_id: student.id, subject_id: selectedSubject.id,
+                term_id: pt.id, result_type: "end_of_term",
+                total_score: ptVal, grade_letter: ptGrade.letter,
+                did_not_participate: false, uploaded_by: user.id,
+              });
+            }
+          } catch { /* silent — don't block current-term save */ }
+        }
       }
     }
     setSaving(false);
@@ -1523,6 +1589,12 @@ export const UploadResults = () => {
                         <th className="text-center p-3 font-medium text-muted-foreground w-24">Exam Score<br/><span className="text-xs font-normal">/60</span></th>
                         <th className="text-center p-3 font-medium text-muted-foreground w-20">Total<br/><span className="text-xs font-normal">/100</span></th>
                         <th className="text-center p-3 font-medium text-muted-foreground w-16">Grade</th>
+                        {(classData.prevTerms || []).map((pt: any, idx: number) => (
+                          <th key={pt.id} className="text-center p-3 font-medium text-muted-foreground w-24">
+                            {idx === 0 ? "1st Term" : idx === 1 ? "2nd Term" : pt.name}<br/>
+                            <span className="text-xs font-normal">/100</span>
+                          </th>
+                        ))}
                         <th className="text-left p-3 font-medium text-muted-foreground">Comment (optional)</th>
                       </> : <>
                         <th className="text-center p-3 font-medium text-muted-foreground w-36">Score /30</th>
@@ -1654,6 +1726,23 @@ export const UploadResults = () => {
                             : <span className="text-muted-foreground text-xs">—</span>
                         }
                       </td>
+                      {selType === "end_of_term" && (classData.prevTerms || []).map((pt: any) => (
+                        <td key={pt.id} className="p-2">
+                          {entry.dnp
+                            ? <span className="text-muted-foreground text-sm italic text-center block">—</span>
+                            : <Input
+                                type="number" step="0.5" min="0" max="100"
+                                value={entry.prevTermScores?.[pt.id] ?? ""}
+                                onChange={e => setScores(prev => ({
+                                  ...prev,
+                                  [student.id]: { ...entry, prevTermScores: { ...(entry.prevTermScores || {}), [pt.id]: e.target.value } }
+                                }))}
+                                className="h-8 text-sm text-center w-full"
+                                placeholder="0–100"
+                              />
+                          }
+                        </td>
+                      ))}
                       <td className="p-3">
                         {!entry.dnp && (
                           <Input
