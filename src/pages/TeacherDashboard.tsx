@@ -551,8 +551,11 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
             const complete = uploaded >= total && total > 0;
             return (
               <div key={student.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
-                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
-                  {student.full_name?.[0]?.toUpperCase() || "?"}
+                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden flex-shrink-0">
+                  {student.avatar_url
+                    ? <img src={student.avatar_url} className="w-full h-full object-cover" alt="" />
+                    : <span className="text-primary font-bold text-sm">{student.full_name?.[0]?.toUpperCase() || "?"}</span>
+                  }
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground">{student.full_name}</p>
