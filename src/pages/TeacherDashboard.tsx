@@ -461,11 +461,9 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
         head_teacher_comment: comment,
         status: "submitted",
         submitted_at: new Date().toISOString(),
-        ...(classData?.isCommentMode ? {
-          days_open: attendanceDaysOpen ? parseInt(attendanceDaysOpen) : null,
-          days_present: attendanceDaysPresent ? parseInt(attendanceDaysPresent) : null,
-          next_term_begins: attendanceNextTerm || null,
-        } : {}),
+        days_open: attendanceDaysOpen ? parseInt(attendanceDaysOpen) : null,
+        days_present: attendanceDaysPresent ? parseInt(attendanceDaysPresent) : null,
+        next_term_begins: attendanceNextTerm || null,
       }, { onConflict: "student_id,term_id,result_type" });
       if (error) throw error;
 
@@ -668,23 +666,21 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
                 );
               })()}
 
-              {/* Attendance (comment mode only) */}
-              {classData?.isCommentMode && (
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <Label className="text-xs mb-1 block">Days School Open</Label>
-                    <Input type="number" value={attendanceDaysOpen} onChange={e => setAttendanceDaysOpen(e.target.value)} placeholder="e.g. 106" className="h-8 text-sm" disabled={reviewing?.submission?.status === "approved"} />
-                  </div>
-                  <div>
-                    <Label className="text-xs mb-1 block">Days Present</Label>
-                    <Input type="number" value={attendanceDaysPresent} onChange={e => setAttendanceDaysPresent(e.target.value)} placeholder="e.g. 100" className="h-8 text-sm" disabled={reviewing?.submission?.status === "approved"} />
-                  </div>
-                  <div>
-                    <Label className="text-xs mb-1 block">Next Term Begins</Label>
-                    <Input value={attendanceNextTerm} onChange={e => setAttendanceNextTerm(e.target.value)} placeholder="e.g. Mon 27th April 2026" className="h-8 text-sm" disabled={reviewing?.submission?.status === "approved"} />
-                  </div>
+              {/* Attendance */}
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs mb-1 block">Days School Open</Label>
+                  <Input type="number" value={attendanceDaysOpen} onChange={e => setAttendanceDaysOpen(e.target.value)} placeholder="e.g. 106" className="h-8 text-sm" disabled={reviewing?.submission?.status === "approved"} />
                 </div>
-              )}
+                <div>
+                  <Label className="text-xs mb-1 block">Days Present</Label>
+                  <Input type="number" value={attendanceDaysPresent} onChange={e => setAttendanceDaysPresent(e.target.value)} placeholder="e.g. 100" className="h-8 text-sm" disabled={reviewing?.submission?.status === "approved"} />
+                </div>
+                <div>
+                  <Label className="text-xs mb-1 block">Next Term Begins</Label>
+                  <Input value={attendanceNextTerm} onChange={e => setAttendanceNextTerm(e.target.value)} placeholder="e.g. Mon 27th April 2026" className="h-8 text-sm" disabled={reviewing?.submission?.status === "approved"} />
+                </div>
+              </div>
 
               {/* Head teacher comment */}
               <div>
