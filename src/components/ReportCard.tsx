@@ -104,9 +104,9 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
       if (termRes.data?.academic_year) {
         const { data: yt } = await supabase
           .from("terms")
-          .select("id, name, start_date")
+          .select("id, name, created_at")
           .eq("academic_year", termRes.data.academic_year)
-          .order("start_date", { ascending: true });
+          .order("created_at", { ascending: true });
         yearTerms = yt || [];
         termOrder = yearTerms.findIndex((t: any) => t.id === termId);
         const prevTermIds = yearTerms.slice(0, termOrder < 0 ? yearTerms.length : termOrder).map((t: any) => t.id);

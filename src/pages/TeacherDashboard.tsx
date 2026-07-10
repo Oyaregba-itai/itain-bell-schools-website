@@ -1272,9 +1272,9 @@ export const UploadResults = () => {
         const { data: termInfo } = await supabase.from("terms").select("academic_year").eq("id", selTerm).single();
         if (termInfo) {
           const { data: yearTerms } = await supabase.from("terms")
-            .select("id, name, start_date")
+            .select("id, name, created_at")
             .eq("academic_year", termInfo.academic_year)
-            .order("start_date", { ascending: true });
+            .order("created_at", { ascending: true });
           const termIdx = (yearTerms || []).findIndex((t: any) => t.id === selTerm);
           prevTerms = termIdx > 0 ? (yearTerms || []).slice(0, termIdx) : [];
           if (prevTerms.length > 0) {
@@ -1361,7 +1361,9 @@ export const UploadResults = () => {
               uploaded_by: user.id,
             }));
           }
-        } else if (!entry?.score && !entry?.dnp) {
+        } else if (selType === "end_of_term"
+          ? (!entry?.dnp && !entry?.portfolio && !entry?.exam)
+          : (!entry?.score && !entry?.dnp)) {
           continue;
         } else if (entry?.dnp) {
           if (existing) {
@@ -1468,7 +1470,11 @@ export const UploadResults = () => {
     }
   };
 
-  const filledCount = Object.values(scores).filter(s => classData?.isCommentMode ? !!s.comment : (s.dnp || s.score || s.portfolio || s.exam)).length;
+  const filledCount = Object.values(scores).filter(s =>
+    classData?.isCommentMode ? !!s.comment :
+    selType === "end_of_term" ? (s.dnp || s.portfolio || s.exam) :
+    (s.dnp || s.score)
+  ).length;
 
   return (
     <div className="space-y-6">
