@@ -3710,12 +3710,11 @@ const LiveReportCardPreview = ({
 
   const saveSchoolHeadComment = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("report_submissions").upsert({
-        student_id: selStudent,
-        term_id: selTerm,
-        result_type: selType,
-        head_of_school_comment: schoolHeadComment,
-      }, { onConflict: "student_id,term_id,result_type" });
+      const { error } = await supabase.from("report_submissions")
+        .update({ head_of_school_comment: schoolHeadComment })
+        .eq("student_id", selStudent)
+        .eq("term_id", selTerm)
+        .eq("result_type", selType);
       if (error) throw error;
     },
     onSuccess: () => {
