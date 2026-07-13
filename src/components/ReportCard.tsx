@@ -183,7 +183,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
     const hasNewFormat = isEndOfTerm && scoredResults.some((r: any) => r.portfolio_score != null);
     const outOf = isEndOfTerm ? (hasNewFormat ? 100 : 70) : 30;
     const totalObtainable = scoredResults.length * outOf;
-    const totalObtained = scoredResults.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
+    const totalObtained = rnd1(scoredResults.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0));
     const totalPct = totalObtainable > 0 ? (totalObtained / totalObtainable) * 100 : 0;
     const overallGrade = getGradeInfo(totalPct);
     const average = scoredResults.length > 0 ? totalObtained / scoredResults.length : 0;
@@ -232,7 +232,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
         const term1 = prevScores[0] != null ? prevScores[0] : "—";
         const term2 = prevScores[1] != null ? prevScores[1] : "—";
         const cumulative = [term1, term2, total].every(v => v !== "—")
-          ? (Number(term1) + Number(term2) + total) : "—";
+          ? rnd1(Number(term1) + Number(term2) + total) : "—";
         return `<tr style="background:${bg}">
           <td style="padding:4px 6px;border-bottom:1px solid #ddd">${r.subjectName}</td>
           <td style="padding:4px 5px;border-bottom:1px solid #ddd;text-align:center">${portfolio}</td>
@@ -615,7 +615,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
   const hasNewFormat = isEndOfTerm && scoredResults.some((r: any) => r.portfolio_score != null);
   const outOfPreview = isEndOfTerm ? (hasNewFormat ? 100 : 70) : 30;
   const totalObtainable = scoredResults.length * outOfPreview;
-  const totalObtained = scoredResults.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0);
+  const totalObtained = rnd1(scoredResults.reduce((s: number, r: any) => s + Number(r.total_score || 0), 0));
   const totalPct = totalObtainable > 0 ? (totalObtained / totalObtainable) * 100 : 0;
   const overallGrade = getGradeInfo(totalPct);
   const average = scoredResults.length > 0 ? totalObtained / scoredResults.length : 0;
