@@ -833,7 +833,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                     const term1 = prevScores[0] != null ? prevScores[0] : "—";
                     const term2 = prevScores[1] != null ? prevScores[1] : "—";
                     const cumulative = [term1, term2, total].every(v => v !== "—")
-                      ? Number(term1) + Number(term2) + total : "—";
+                      ? rnd1(Number(term1) + Number(term2) + total) : "—";
                     return (
                       <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                         <td className="px-2 py-1 border-b border-gray-200">{r.subjectName}</td>
@@ -962,7 +962,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                     const term1 = prevScores[0] != null ? prevScores[0] : "—";
                     const term2 = prevScores[1] != null ? prevScores[1] : "—";
                     const cumulative = [term1, term2, total].every(v => v !== "—")
-                      ? Number(term1) + Number(term2) + total : "—";
+                      ? rnd1(Number(term1) + Number(term2) + total) : "—";
                     return (
                       <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                         <td className="px-2 py-1 border-b border-gray-200">{r.subjectName}</td>
