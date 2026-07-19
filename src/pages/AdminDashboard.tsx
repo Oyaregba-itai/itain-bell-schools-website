@@ -3535,7 +3535,7 @@ const SubmittedReportCards = () => {
                 <th className="text-left p-3 font-medium text-muted-foreground">Term</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">Type</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">Submitted by</th>
-                <th className="text-left p-3 font-medium text-muted-foreground">Class Teacher Comment</th>
+                <th className="text-left p-3 font-medium text-muted-foreground">Teacher's Comment</th>
                 <th className="p-3" />
               </tr>
             </thead>
@@ -3572,11 +3572,11 @@ const SubmittedReportCards = () => {
               <ReportCard studentId={reviewing.student_id} termId={reviewing.term_id} resultType={reviewing.result_type} inline />
 
               <div>
-                <Label className="text-sm font-medium">Head of School Comment</Label>
+                <Label className="text-sm font-medium">Head Teacher's Comment</Label>
                 <Textarea
                   value={schoolComment}
                   onChange={e => setSchoolComment(e.target.value)}
-                  placeholder="Write the Head of School's comment on this student's overall performance..."
+                  placeholder="Write the Head Teacher's comment on this student's overall performance..."
                   rows={3}
                   className="mt-1"
                 />
@@ -3812,11 +3812,11 @@ const LiveReportCardPreview = ({
 
             {isSuperAdmin && (
               <div className="border-t border-border pt-3 space-y-2">
-                <h4 className="font-heading font-semibold text-foreground text-sm">Head of School Comment</h4>
+                <h4 className="font-heading font-semibold text-foreground text-sm">Head Teacher's Comment</h4>
                 <Textarea
                   value={schoolHeadComment}
                   onChange={e => setSchoolHeadComment(e.target.value)}
-                  placeholder="Write the Head of School's comment on this student's overall performance..."
+                  placeholder="Write the Head Teacher's comment on this student's overall performance..."
                   rows={3}
                   className="text-sm"
                 />
@@ -3984,7 +3984,7 @@ const ViewAllResults = ({ isSuperAdmin = true }: { isSuperAdmin?: boolean }) => 
               {editing.total_score && <p className="text-xs mt-1 font-semibold text-muted-foreground">Grade: {getGradeLetterAdmin(editScore)}</p>}
             </div>
             <div>
-              <Label>Teacher Comment</Label>
+              <Label>Teacher's Comment</Label>
               <Textarea value={editing.teacher_comments || ""} onChange={e => setEditing({ ...editing, teacher_comments: e.target.value })} rows={2} placeholder="Optional comment..." />
             </div>
             <Button className="w-full hero-gradient" onClick={() => updateResult.mutate()} disabled={updateResult.isPending}>

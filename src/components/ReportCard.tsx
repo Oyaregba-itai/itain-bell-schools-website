@@ -113,7 +113,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
         if (prevTermIds.length > 0) {
           const { data: pr } = await supabase
             .from("results")
-            .select("term_id, subject_id, total_score")
+            .select("term_id, subject_id, total_score, did_not_participate")
             .eq("student_id", studentId)
             .eq("result_type", "end_of_term")
             .in("term_id", prevTermIds);
@@ -199,9 +199,10 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
     const photoUrl = student.avatar_url || "";
     const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 
-    // Build per-subject previous term lookup
+    // Build per-subject previous term lookup (skip DNP rows — they don't contribute to cumulative)
     const prevBySubject: Record<string, number[]> = {};
     (prevTermResults || []).forEach((pr: any) => {
+      if (pr.did_not_participate) return;
       const termIdx = (yearTerms || []).findIndex((t: any) => t.id === pr.term_id);
       if (termIdx < 0) return;
       if (!prevBySubject[pr.subject_id]) prevBySubject[pr.subject_id] = [];
@@ -231,8 +232,8 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
         const prevScores = prevBySubject[r.subject_id] || [];
         const term1 = prevScores[0] != null ? prevScores[0] : "—";
         const term2 = prevScores[1] != null ? prevScores[1] : "—";
-        const cumulative = [term1, term2, total].every(v => v !== "—")
-          ? rnd1(Number(term1) + Number(term2) + total) : "—";
+        const prevSum = [term1, term2].filter(v => v !== "—").reduce((a: number, v) => a + Number(v), 0);
+        const cumulative = rnd1(prevSum + total);
         return `<tr style="background:${bg}">
           <td style="padding:4px 6px;border-bottom:1px solid #ddd">${r.subjectName}</td>
           <td style="padding:4px 5px;border-bottom:1px solid #ddd;text-align:center">${portfolio}</td>
@@ -282,11 +283,13 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
       const commentRows = results.map((r: any, i: number) => {
         const bg = i % 2 === 0 ? "#fff" : "#f8f9fa";
         return `<tr style="background:${bg}">
-          <td style="padding:5px 8px;border-bottom:1px solid #ddd">${r.subjectName}</td>
+          <td style="padding:5px 8px;border-bottom:1px solid #ddd;font-weight:bold;width:30%">${r.subjectName}</td>
           <td style="padding:5px 8px;border-bottom:1px solid #ddd">${r.teacher_comments || ""}</td>
         </tr>`;
       }).join("");
       const daysAbsent = (daysOpen != null && daysPresent != null) ? daysOpen - daysPresent : "—";
+      const nextTermName = yearTerms?.[termOrder + 1]?.name || "Next Term";
+      const nextTermLabel = `${nextTermName} Begins`;
       const commentHtml = `<!DOCTYPE html><html><head><title>${studentName} — ${reportHeader}</title>
       <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:12px}
       @media print{body{padding:0}@page{margin:8mm;size:A4}}table{border-collapse:collapse}</style>
@@ -319,26 +322,26 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
         <td style="border:1px solid #333;padding:0;vertical-align:top;width:62%">
           <table style="width:100%;border-collapse:collapse;font-size:10px"><thead>
             <tr style="background:#d6e8f7">
-              <th style="padding:5px 8px;border-bottom:1px solid #333;text-align:left;width:35%">SUBJECTS</th>
-              <th style="padding:5px 8px;border-bottom:1px solid #333;text-align:left">COMMENTS</th>
+              <th colspan="2" style="padding:5px 8px;border-bottom:1px solid #333;text-align:left">COMMENTS</th>
             </tr></thead><tbody>${commentRows}</tbody></table>
         </td>
         <td style="border:1px solid #333;padding:10px 12px;vertical-align:top;width:38%">
           <table style="width:100%;border-collapse:collapse;font-size:10px">
-            <tr><td style="padding:5px 0;border-bottom:1px solid #eee;font-weight:bold">Days School Open:</td><td style="padding:5px 0;border-bottom:1px solid #eee;text-align:right">${daysOpen ?? "—"}</td></tr>
-            <tr><td style="padding:5px 0;border-bottom:1px solid #eee;font-weight:bold">Days Present:</td><td style="padding:5px 0;border-bottom:1px solid #eee;text-align:right">${daysPresent ?? "—"}</td></tr>
-            <tr><td style="padding:5px 0;border-bottom:1px solid #eee;font-weight:bold">Days Absent:</td><td style="padding:5px 0;border-bottom:1px solid #eee;text-align:right">${daysAbsent}</td></tr>
-            <tr><td style="padding:5px 0;font-weight:bold">Next Term Begins:</td><td style="padding:5px 0;text-align:right;font-size:9px">${nextTermBegins ?? "—"}</td></tr>
+            <tr><td style="padding:5px 0;border-bottom:1px solid #eee;font-weight:bold">Days School Open</td><td style="padding:5px 0;border-bottom:1px solid #eee;text-align:right">${daysOpen ?? "—"}</td></tr>
+            <tr><td style="padding:5px 0;border-bottom:1px solid #eee;font-weight:bold">Days Present</td><td style="padding:5px 0;border-bottom:1px solid #eee;text-align:right">${daysPresent ?? "—"}</td></tr>
+            <tr><td style="padding:5px 0;border-bottom:1px solid #eee;font-weight:bold">Days Absent</td><td style="padding:5px 0;border-bottom:1px solid #eee;text-align:right">${daysAbsent}</td></tr>
+            <tr><td colspan="2" style="padding:6px 8px;background:#e07b39;color:#fff;font-weight:bold;margin-top:4px">${nextTermLabel}</td></tr>
+            <tr><td colspan="2" style="padding:5px 0;text-align:center;font-weight:bold;font-size:9px">${nextTermBegins ?? "—"}</td></tr>
           </table>
         </td></tr></table>
       <table style="width:100%;border:2px solid #333;border-top:0;margin-bottom:0"><tr>
-        <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Class Teacher Comments</td></tr><tr>
+        <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Teacher's Comment.</td></tr><tr>
         <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headTeacherComment}</td>
         <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date: ${today}</td>
         <td style="border:1px solid #333;padding:5px 8px;font-size:10px">${headTeacherSignatureUrl ? `<img src="${headTeacherSignatureUrl}" style="height:28px;max-width:90px;object-fit:contain" alt="signature" />` : "Signature: ___________"}</td></tr><tr>
         <td colspan="3" style="border:1px solid #333;padding:5px 8px;font-size:10px"><strong>Class Teacher:</strong> ${headTeacherName || "—"}</td></tr></table>
       <table style="width:100%;border:2px solid #333;border-top:0"><tr>
-        <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Head of School Comments</td></tr><tr>
+        <td colspan="3" style="border:1px solid #333;padding:2px 8px;background:#ebebeb;font-weight:bold;font-size:10px">Head Teacher's Comment.</td></tr><tr>
         <td style="border:1px solid #333;padding:5px 8px;width:50%;font-size:10px">${headOfSchoolComment}</td>
         <td style="border:1px solid #333;padding:5px 8px;font-size:10px">Date: ${today}</td>
         <td style="border:1px solid #333;padding:5px 8px;font-size:10px">${headOfSchoolSignatureUrl ? `<img src="${headOfSchoolSignatureUrl}" style="height:28px;max-width:90px;object-fit:contain" alt="signature" />` : "Signature: ___________"}</td></tr><tr>
@@ -457,7 +460,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
           <tr><td style="padding:3px 0;font-weight:bold">DaysPresent</td><td style="text-align:right">${daysPresent ?? "—"}</td></tr>
           <tr><td style="padding:3px 0;font-weight:bold">Days Absent</td><td style="text-align:right">${daysAbsent2}</td></tr>
         </table>
-        <div style="background:#e65100;color:white;text-align:center;font-weight:bold;font-size:9px;padding:3px;margin-bottom:2px">${termName.toUpperCase()} TERM BEGINS</div>
+        <div style="background:#e65100;color:white;text-align:center;font-weight:bold;font-size:9px;padding:3px;margin-bottom:2px">${(termNames[termOrder + 1] || "Christmas Term").toUpperCase()} BEGINS</div>
         <div style="text-align:center;font-size:9px;font-weight:bold;margin-bottom:6px">${nextTermBegins ?? "—"}</div>
         <div style="display:flex;align-items:flex-end;height:80px;gap:1px;border-left:1px solid #999;border-bottom:1px solid #999;padding:0 2px;margin-bottom:4px">${bars}</div>
         <table style="width:100%;border-collapse:collapse;font-size:7.5px">
@@ -621,9 +624,10 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
   const average = scoredResults.length > 0 ? totalObtained / scoredResults.length : 0;
   const studentName = student.full_name || `${student.first_name || ""} ${student.last_name || ""}`.trim();
   const reportLabel = resultType === "mid_term" ? "Mid Term" : "End of Term";
-  // Build per-subject previous term lookup for cumulative display
+  // Build per-subject previous term lookup for cumulative display (skip DNP rows)
   const prevBySubjectPreview: Record<string, number[]> = {};
   (prevTermResults || []).forEach((pr: any) => {
+    if (pr.did_not_participate) return;
     const idx = (yearTerms || []).findIndex((t: any) => t.id === pr.term_id);
     if (idx < 0) return;
     if (!prevBySubjectPreview[pr.subject_id]) prevBySubjectPreview[pr.subject_id] = [];
@@ -754,8 +758,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                 <table className="w-full border-collapse text-[10px]">
                   <thead>
                     <tr className="bg-blue-100">
-                      <th className="text-left px-2 py-1.5 border-b border-gray-400 font-semibold w-[40%]">SUBJECTS</th>
-                      <th className="text-left px-2 py-1.5 border-b border-l border-gray-400 font-semibold">COMMENTS</th>
+                      <th colSpan={2} className="text-left px-2 py-1.5 border-b border-gray-400 font-semibold">COMMENTS</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -775,16 +778,23 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                 <table className="w-full border-collapse">
                   <tbody>
                     {[
-                      ["Days School Open:", daysOpen ?? "—"],
-                      ["Days Present:", daysPresent ?? "—"],
-                      ["Days Absent:", daysOpen != null && daysPresent != null ? daysOpen - daysPresent : "—"],
-                      ["Next Term Begins:", nextTermBegins ?? "—"],
+                      ["Days School Open", daysOpen ?? "—"],
+                      ["Days Present", daysPresent ?? "—"],
+                      ["Days Absent", daysOpen != null && daysPresent != null ? daysOpen - daysPresent : "—"],
                     ].map(([l, v]) => (
                       <tr key={String(l)} className="border-b border-gray-200">
                         <td className="py-1.5 font-semibold pr-2">{l}</td>
                         <td className="py-1.5 text-right">{String(v)}</td>
                       </tr>
                     ))}
+                    <tr>
+                      <td colSpan={2} className="py-1.5 px-2 font-bold text-white text-center rounded-sm mt-1" style={{ backgroundColor: "#e07b39" }}>
+                        {(yearTerms?.[termOrder + 1]?.name || "Next Term") + " Begins"}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colSpan={2} className="py-1.5 text-center font-semibold text-[9px]">{nextTermBegins ?? "—"}</td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -832,8 +842,8 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                     const prevScores = prevBySubjectPreview[r.subject_id] || [];
                     const term1 = prevScores[0] != null ? prevScores[0] : "—";
                     const term2 = prevScores[1] != null ? prevScores[1] : "—";
-                    const cumulative = [term1, term2, total].every(v => v !== "—")
-                      ? rnd1(Number(term1) + Number(term2) + total) : "—";
+                    const prevSum = [term1, term2].filter(v => v !== "—").reduce((a: number, v) => a + Number(v), 0);
+                    const cumulative = rnd1(prevSum + total);
                     return (
                       <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                         <td className="px-2 py-1 border-b border-gray-200">{r.subjectName}</td>
@@ -881,7 +891,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                   ))}
                 </tbody>
               </table>
-              <div className="bg-orange-700 text-white text-center font-bold text-[7px] py-1">{(term as any)?.name?.toUpperCase()} TERM BEGINS</div>
+              <div className="bg-orange-700 text-white text-center font-bold text-[7px] py-1">{(termNamesPreview[termOrder + 1] || "Christmas Term").toUpperCase()} BEGINS</div>
               {nextTermBegins && <p className="text-center font-bold text-[8px]">{nextTermBegins}</p>}
               <div className="flex items-end gap-px border-l border-b border-gray-400 h-16 px-0.5">
                 {scoredResults.map((r: any) => {
@@ -961,8 +971,8 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                     const prevScores = prevBySubjectPreview[r.subject_id] || [];
                     const term1 = prevScores[0] != null ? prevScores[0] : "—";
                     const term2 = prevScores[1] != null ? prevScores[1] : "—";
-                    const cumulative = [term1, term2, total].every(v => v !== "—")
-                      ? rnd1(Number(term1) + Number(term2) + total) : "—";
+                    const prevSum = [term1, term2].filter(v => v !== "—").reduce((a: number, v) => a + Number(v), 0);
+                    const cumulative = rnd1(prevSum + total);
                     return (
                       <tr key={r.id} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
                         <td className="px-2 py-1 border-b border-gray-200">{r.subjectName}</td>
@@ -1121,7 +1131,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
 
           {/* Head teacher comment */}
           <div className="border-2 border-gray-800 border-t-0">
-            <div className="bg-gray-100 px-2 py-1 font-bold border-b border-gray-400">Class Teacher Comments</div>
+            <div className="bg-gray-100 px-2 py-1 font-bold border-b border-gray-400">{isCommentMode ? "Teacher's Comment." : "Class Teacher Comments"}</div>
             <div className="grid grid-cols-3 divide-x divide-gray-400">
               <div className="col-span-1 px-2 py-2 min-h-[32px]">{headTeacherComment || <span className="text-gray-400 italic">Pending</span>}</div>
               <div className="px-2 py-2">Date: {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>
@@ -1139,7 +1149,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
 
           {/* Head of School comment */}
           <div className="border-2 border-gray-800 border-t-0">
-            <div className="bg-gray-100 px-2 py-1 font-bold border-b border-gray-400">Head of School Comments</div>
+            <div className="bg-gray-100 px-2 py-1 font-bold border-b border-gray-400">{isCommentMode ? "Head Teacher's Comment." : "Head of School Comments"}</div>
             <div className="grid grid-cols-3 divide-x divide-gray-400">
               <div className="col-span-1 px-2 py-2 min-h-[32px]">{headOfSchoolComment || <span className="text-gray-400 italic">Pending</span>}</div>
               <div className="px-2 py-2">Date: {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</div>

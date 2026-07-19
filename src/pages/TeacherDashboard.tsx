@@ -684,7 +684,7 @@ const HeadOfClassReports = ({ userId, headClasses }: { userId: string; headClass
 
               {/* Head teacher comment */}
               <div>
-                <Label className="text-sm font-medium">Your Comment (Class Teacher)</Label>
+                <Label className="text-sm font-medium">Teacher's Comment</Label>
                 <Textarea
                   value={headComment}
                   onChange={e => setHeadComment(e.target.value)}
