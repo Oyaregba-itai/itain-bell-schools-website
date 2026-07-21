@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatAge } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,7 +38,7 @@ const ParentDashboard = () => {
 
 const ChildProfile = ({ child, className, onBack }: { child: any; className: string; onBack: () => void }) => {
   const dob = child.date_of_birth ? new Date(child.date_of_birth) : null;
-  const age = dob ? `${new Date().getFullYear() - dob.getFullYear()} yrs` : null;
+  const age = formatAge(child.date_of_birth) || null;
 
   return (
     <div className="space-y-6">

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatAge } from "@/lib/utils";
 import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -1859,9 +1860,7 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
 
   const { student, parents, classSubjects, results } = data;
   const sName = (student as any).full_name || `${(student as any).first_name || ""} ${(student as any).last_name || ""}`.trim() || "Student";
-  const age = (student as any).date_of_birth
-    ? `${new Date().getFullYear() - new Date((student as any).date_of_birth).getFullYear()} years`
-    : null;
+  const age = formatAge((student as any).date_of_birth, " years") || null;
 
   return (
     <div className="space-y-6">

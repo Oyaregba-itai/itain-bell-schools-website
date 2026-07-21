@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { formatAge } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -190,7 +191,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
     const studentName = student.full_name || `${student.first_name || ""} ${student.last_name || ""}`.trim();
     const gender = student.gender ? String(student.gender).toUpperCase() : "—";
     const dob = student.date_of_birth;
-    const age = dob ? `${new Date().getFullYear() - new Date(dob).getFullYear()} YEARS` : "—";
+    const age = formatAge(dob, " YEARS");
     const termName = (term as any)?.name || "—";
     const session = (term as any)?.academic_year || "—";
     const reportHeader = resultType === "mid_term" ? "MID TERM REPORT SHEET" : "END OF TERM REPORT SHEET";
@@ -637,7 +638,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
   const t1LabelPreview = termNamesPreview[0] ? `${termNamesPreview[0]}` : "1st Term";
   const t2LabelPreview = termNamesPreview[1] ? `${termNamesPreview[1]}` : "2nd Term";
   const dob = student.date_of_birth;
-  const age = dob ? `${new Date().getFullYear() - new Date(dob).getFullYear()} yrs` : "—";
+  const age = formatAge(dob);
 
   const cardContent = (
     <>
