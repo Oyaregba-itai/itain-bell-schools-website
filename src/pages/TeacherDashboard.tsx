@@ -18,7 +18,8 @@ import TimetableView from "@/components/TimetableView";
 import EventsView from "@/components/EventsView";
 import MessagingView from "@/components/MessagingView";
 import ProfilePage from "@/components/ProfilePage";
-import { FinancesView } from "@/pages/AdminDashboard";
+import { FinanceWorkspace } from "@/components/FinanceWorkspace";
+import { financeClient } from "@/lib/financeApi";
 import ReportCard from "@/components/ReportCard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
@@ -40,7 +41,16 @@ const TeacherDashboard = () => {
   });
 
   const isHeadOfClass = (headClasses?.length ?? 0) > 0;
-  const isFinanceHead = profile?.is_finance_head === true;
+  const { data: financeAccess } = useQuery({
+    queryKey: ["finance-access", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await financeClient.rpc("can_manage_school_finance");
+      if (error) throw error;
+      return data === true;
+    },
+  });
+  const isFinanceHead = financeAccess === true || profile?.is_finance_head === true;
 
   const extraTabs = [
     ...(isHeadOfClass
@@ -61,7 +71,7 @@ const TeacherDashboard = () => {
       {activeTab === "my-results" && <MyResults />}
       {activeTab === "my-class" && isHeadOfClass && <MyClassView headClasses={headClasses!} />}
       {activeTab === "report-cards" && isHeadOfClass && user && <HeadOfClassReports userId={user.id} headClasses={headClasses!} />}
-      {activeTab === "finances" && isFinanceHead && <FinancesView />}
+      {activeTab === "finances" && isFinanceHead && <FinanceWorkspace />}
       {activeTab === "timetable" && <TimetableView />}
       {activeTab === "events" && <EventsView />}
       {activeTab === "announcements" && <AnnouncementsView />}

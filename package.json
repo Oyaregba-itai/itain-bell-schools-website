@@ -11,6 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:finance-db": "node scripts/test-finance-db.mjs",
+    "test:finance-ui": "node scripts/test-finance-ui.mjs",
     "seed-students": "tsx seed-students.ts"
   },
   "dependencies": {
@@ -69,6 +71,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@eslint/js": "^9.32.0",
     "@playwright/test": "^1.57.0",
     "@tailwindcss/typography": "^0.5.16",

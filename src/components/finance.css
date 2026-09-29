@@ -1,0 +1,44 @@
+@media print {
+  body:has(.finance-print-area) * {
+    visibility: hidden;
+  }
+  body:has(.finance-print-area) {
+    background: white;
+    color: black;
+  }
+  .finance-print-area,
+  .finance-print-area * {
+    visibility: visible !important;
+  }
+  .finance-print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: 0 !important;
+    padding: 12mm !important;
+    background: white !important;
+    color: black !important;
+  }
+  .finance-print-area .overflow-x-auto {
+    overflow: visible !important;
+  }
+  .finance-print-area table {
+    font-size: 10pt;
+  }
+  .finance-print-area tr,
+  .finance-print-area footer {
+    break-inside: avoid;
+  }
+  .finance-print-area thead {
+    display: table-header-group;
+  }
+  .finance-print-area h3,
+  .finance-print-area h4 {
+    break-after: avoid;
+  }
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+}
