@@ -27,6 +27,7 @@
     font-size: 10pt;
   }
   .finance-print-area tr,
+  .finance-print-area .finance-charts section,
   .finance-print-area footer {
     break-inside: avoid;
   }

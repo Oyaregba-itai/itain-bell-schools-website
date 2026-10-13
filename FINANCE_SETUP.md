@@ -8,6 +8,9 @@ The **Finances** dashboard tab records school income and expenses in NGN. Admini
 - Optional item calculations and private PDF/image supporting documents (up to 10 MB).
 - Monday–Sunday weeks, calendar months, January–December years and custom dates.
 - School-event filters, monthly/category/event summaries, CSV exports and printable statements.
+- Reports include an income/spending pie chart and monthly income, spending and net profit/loss graph. They use the full filtered report, excluding void records, and show months with no transactions as zero.
+- Student fees opens a calculation table with student and fee-term selection, selected-charge totals, payments received, remaining balances and credits. Current fee rates are used; it is a calculation worksheet, not an issued invoice. Unallocated payments are listed separately and are not automatically applied to a fee.
+- Payments can be recorded against each fee with a required reason and receipt reference, including instalments. They use the existing payment-to-ledger synchronization. The worksheet supports CSV export and printing; historical reasons remain visible alongside receipts.
 - Cash-basis profit/loss: receipts minus spending. This does not include unpaid invoices, unpaid fees, depreciation or accrual adjustments.
 - Posted entries cannot be overwritten or deleted through the app. Corrections use a void reason and a replacement record. The original and audit history remain.
 - Existing positive student fee payments are copied into the ledger once. Database triggers synchronize future payment inserts/updates/deletions. Removing a student payment voids its ledger record while retaining history. Deleting a pupil preserves their historical income in the ledger even when the old payment table cascades its deletion.

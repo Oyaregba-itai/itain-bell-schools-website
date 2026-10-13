@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SchoolFeeWorksheet } from "@/components/SchoolFeeWorksheet";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { financeClient as supabase } from "@/lib/financeApi";
 import { useAuth } from "@/hooks/useAuth";
@@ -38,9 +39,9 @@ export const StudentFeesView = () => {
   const { user, isSuperAdmin } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<"overview" | "fees" | "payments" | "record">(
-    "overview",
-  );
+  const [tab, setTab] = useState<
+    "worksheet" | "overview" | "fees" | "payments" | "record"
+  >("worksheet");
   const [feeForm, setFeeForm] = useState({
     name: "",
     amount: "",
@@ -215,6 +216,7 @@ export const StudentFeesView = () => {
     },
     onSuccess: () => {
       toast({ title: "Fee structure added" });
+      queryClient.invalidateQueries({ queryKey: ["fee-worksheet"] });
       queryClient.invalidateQueries({ queryKey: ["fee-structures"] });
       setFeeForm({
         name: "",
@@ -248,6 +250,7 @@ export const StudentFeesView = () => {
     },
     onSuccess: () => {
       toast({ title: "Fee updated" });
+      queryClient.invalidateQueries({ queryKey: ["fee-worksheet"] });
       queryClient.invalidateQueries({ queryKey: ["fee-structures"] });
       setEditingFee(null);
     },
@@ -269,6 +272,7 @@ export const StudentFeesView = () => {
     },
     onSuccess: () => {
       toast({ title: "Fee structure deleted" });
+      queryClient.invalidateQueries({ queryKey: ["fee-worksheet"] });
       queryClient.invalidateQueries({ queryKey: ["fee-structures"] });
     },
     onError: (err: Error) =>
@@ -285,6 +289,8 @@ export const StudentFeesView = () => {
       if (isNaN(amt) || amt <= 0)
         throw new Error("Please enter a valid amount");
       if (!payForm.student_id) throw new Error("Please select a student");
+      if (!payForm.notes.trim())
+        throw new Error("Please enter the reason for this payment");
       const { error } = await supabase.from("payments").insert([
         {
           student_id: payForm.student_id,
@@ -302,6 +308,7 @@ export const StudentFeesView = () => {
     },
     onSuccess: () => {
       toast({ title: "Payment recorded successfully" });
+      queryClient.invalidateQueries({ queryKey: ["fee-worksheet"] });
       queryClient.invalidateQueries({ queryKey: ["school-finance"] });
       queryClient.invalidateQueries({ queryKey: ["all-payments"] });
       queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
@@ -331,6 +338,7 @@ export const StudentFeesView = () => {
     },
     onSuccess: () => {
       toast({ title: "Payment removed; its finance record has been voided" });
+      queryClient.invalidateQueries({ queryKey: ["fee-worksheet"] });
       queryClient.invalidateQueries({ queryKey: ["all-payments"] });
       queryClient.invalidateQueries({ queryKey: ["school-finance"] });
     },
@@ -375,6 +383,7 @@ export const StudentFeesView = () => {
       <div className="flex gap-1 bg-muted rounded-xl p-1 w-fit flex-wrap">
         {(
           [
+            ["worksheet", "Fee calculation table"],
             ["overview", "Overview"],
             ["fees", "Fee Structures"],
             ["payments", "Payment History"],
@@ -392,6 +401,7 @@ export const StudentFeesView = () => {
       </div>
 
       {/* ── Overview ── */}
+      {tab === "worksheet" && <SchoolFeeWorksheet />}
       {tab === "overview" && (
         <div className="space-y-6">
           <div className="grid sm:grid-cols-3 gap-4">
@@ -952,8 +962,10 @@ export const StudentFeesView = () => {
               </div>
             </div>
             <div>
-              <Label>Notes (optional)</Label>
+              <Label>Reason for payment *</Label>
               <Textarea
+                required
+                maxLength={3000}
                 value={payForm.notes}
                 onChange={(e) =>
                   setPayForm({ ...payForm, notes: e.target.value })

@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { StudentFeesView } from "@/components/StudentFeesView";
+import { FinanceCharts } from "@/components/FinanceCharts";
 import {
   fetchFinanceEvents,
   fetchFinanceReport,
@@ -428,7 +429,7 @@ export function FinanceWorkspace() {
                           <tr>
                             {[
                               "Record / date",
-                              "Details",
+                              "Reason / activity",
                               "Event",
                               "Income",
                               "Spending",
@@ -465,6 +466,11 @@ export function FinanceWorkspace() {
                                 <p className="text-xs text-muted-foreground">
                                   {entry.counterparty} · {entry.category}
                                 </p>
+                                {entry.notes && (
+                                  <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap break-words">
+                                    {entry.notes}
+                                  </p>
+                                )}
                                 {entry.source_payment_id && (
                                   <span className="text-xs text-primary">
                                     Student fee receipt
@@ -698,6 +704,7 @@ function FinanceStatement({
           Cash basis: money received minus money paid during this period. Unpaid
           fees and unpaid bills are excluded. Void records are excluded.
         </p>
+        <FinanceCharts report={report} months={months} />
         <div className="grid gap-6 md:grid-cols-2">
           {(["income", "expense"] as const).map((direction) => (
             <div key={direction}>
@@ -899,23 +906,21 @@ function FinanceEntryForm({
           .upload(path, document);
         if (error) throw error;
       }
-      const { error } = await financeClient
-        .from("finance_entries")
-        .insert({
-          id,
-          direction,
-          amount_kobo: amount,
-          transaction_date: form.date,
-          category: form.category,
-          description: form.description.trim(),
-          counterparty: form.counterparty.trim(),
-          payment_method: form.method,
-          reference: form.reference.trim() || null,
-          notes: form.notes.trim() || null,
-          event_id: form.event === "none" ? null : form.event,
-          document_path: path,
-          line_items: lineItems,
-        });
+      const { error } = await financeClient.from("finance_entries").insert({
+        id,
+        direction,
+        amount_kobo: amount,
+        transaction_date: form.date,
+        category: form.category,
+        description: form.description.trim(),
+        counterparty: form.counterparty.trim(),
+        payment_method: form.method,
+        reference: form.reference.trim() || null,
+        notes: form.notes.trim() || null,
+        event_id: form.event === "none" ? null : form.event,
+        document_path: path,
+        line_items: lineItems,
+      });
       if (error) {
         if (path)
           await financeClient.storage.from("finance-documents").remove([path]);
@@ -984,7 +989,9 @@ function FinanceEntryForm({
         </div>
       </div>
       <div>
-        <Label htmlFor="entry-description">Description / purpose *</Label>
+        <Label htmlFor="entry-description">
+          Description / purpose (reason) *
+        </Label>
         <Input
           id="entry-description"
           required
