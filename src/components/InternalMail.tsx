@@ -15,7 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-type Profile = { user_id: string; full_name: string; email?: string | null; phone?: string | null };
+type Profile = { user_id: string; full_name: string; email?: string | null; role: "admin" | "teacher" | "parent" | "creche_staff" };
 type MailRow = { id: string; sender_id: string; recipient_id: string; subject: string | null; content: string; priority: "normal" | "important" | "urgent"; batch_id: string | null; read_at: string | null; created_at: string };
 
 const db = supabase as any;
@@ -33,12 +33,13 @@ const InternalMail = () => {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [priority, setPriority] = useState<"normal" | "important" | "urgent">("normal");
+  const [recipientGroup, setRecipientGroup] = useState<"all" | "staff" | "parents">("all");
 
   const { data: profiles = [] } = useQuery<Profile[]>({
     queryKey: ["internal-mail-profiles"],
     enabled: Boolean(user?.id),
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("user_id,full_name,email,phone").neq("user_id", user!.id).order("full_name");
+      const { data, error } = await db.rpc("get_internal_mail_recipients");
       if (error) throw error;
       return (data || []) as Profile[];
     },
@@ -57,6 +58,7 @@ const InternalMail = () => {
   });
 
   const profileMap = useMemo(() => new Map(profiles.map((item) => [item.user_id, item])), [profiles]);
+  const visibleRecipients = useMemo(() => profiles.filter((item) => recipientGroup === "all" || (recipientGroup === "parents" ? item.role === "parent" : item.role !== "parent")), [profiles, recipientGroup]);
   const displayedMail = useMemo(() => {
     const seen = new Set<string>();
     return mail.filter((item) => {
@@ -126,7 +128,7 @@ const InternalMail = () => {
     </div>
 
     <Dialog open={composeOpen} onOpenChange={setComposeOpen}><DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>New Internal Mail</DialogTitle></DialogHeader><div className="space-y-5">
-      <div><div className="flex items-center justify-between"><Label>Recipients</Label><button className="text-xs text-primary" onClick={() => setRecipients(recipients.length === profiles.length ? [] : profiles.map((item) => item.user_id))}>{recipients.length === profiles.length ? "Clear all" : "Select all staff"}</button></div><ScrollArea className="mt-2 h-44 rounded-lg border border-border p-3"><div className="grid gap-2 sm:grid-cols-2">{profiles.map((item) => <label key={item.user_id} className="flex cursor-pointer items-center gap-2 rounded p-2 hover:bg-muted"><Checkbox checked={recipients.includes(item.user_id)} onCheckedChange={(checked) => setRecipients(checked ? [...recipients, item.user_id] : recipients.filter((id) => id !== item.user_id))} /><span className="text-sm">{item.full_name}</span></label>)}</div></ScrollArea><p className="mt-1 text-xs text-muted-foreground">{recipients.length} selected</p></div>
+      <div><div className="flex flex-wrap items-center justify-between gap-2"><Label>Recipients</Label><div className="flex rounded-md bg-muted p-1">{([['all','All'],['staff','Staff'],['parents','Parents']] as const).map(([id,label]) => <button key={id} type="button" onClick={() => setRecipientGroup(id)} className={`rounded px-3 py-1 text-xs ${recipientGroup === id ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}>{label}</button>)}</div></div><div className="mt-2 flex justify-end"><button type="button" className="text-xs text-primary" onClick={() => { const ids=visibleRecipients.map((item) => item.user_id); const allSelected=ids.every((id) => recipients.includes(id)); setRecipients(allSelected ? recipients.filter((id) => !ids.includes(id)) : [...new Set([...recipients,...ids])]); }}>{visibleRecipients.every((item) => recipients.includes(item.user_id)) ? `Clear ${recipientGroup}` : `Select all ${recipientGroup}`}</button></div><ScrollArea className="mt-2 h-44 rounded-lg border border-border p-3"><div className="grid gap-2 sm:grid-cols-2">{visibleRecipients.map((item) => <label key={item.user_id} className="flex cursor-pointer items-center gap-2 rounded p-2 hover:bg-muted"><Checkbox checked={recipients.includes(item.user_id)} onCheckedChange={(checked) => setRecipients(checked ? [...recipients, item.user_id] : recipients.filter((id) => id !== item.user_id))} /><span className="min-w-0 text-sm"><span className="block truncate">{item.full_name}</span><span className="text-[10px] uppercase text-muted-foreground">{item.role.replace('_',' ')}</span></span></label>)}</div></ScrollArea><p className="mt-1 text-xs text-muted-foreground">{recipients.length} selected · {profiles.filter((item) => item.role === 'parent').length} parents available</p></div>
       <div className="grid gap-4 sm:grid-cols-[1fr_150px]"><div><Label>Subject</Label><Input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={180} placeholder="Purpose of this correspondence" /></div><div><Label>Priority</Label><Select value={priority} onValueChange={(value: "normal" | "important" | "urgent") => setPriority(value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="normal">Normal</SelectItem><SelectItem value="important">Important</SelectItem><SelectItem value="urgent">Urgent</SelectItem></SelectContent></Select></div></div>
       <div><Label>Message</Label><Textarea value={body} onChange={(event) => setBody(event.target.value)} rows={12} placeholder="Write the internal correspondence here…" /></div>
       {priority === "urgent" && <div className="flex gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-700"><AlertCircle size={17} />Urgent mail should only be used for time-sensitive school matters.</div>}

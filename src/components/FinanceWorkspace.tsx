@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Download,
   FileText,
+  LayoutDashboard,
   Plus,
   Printer,
   RefreshCw,
@@ -67,7 +68,7 @@ export function FinanceWorkspace() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<"ledger" | "reports" | "fees">("ledger");
+  const [tab, setTab] = useState<"overview" | "ledger" | "reports" | "fees">("overview");
   const [period, setPeriod] = useState<FinancePeriod>("month");
   const [anchor, setAnchor] = useState(localDate());
   const [customStart, setCustomStart] = useState(localDate());
@@ -210,6 +211,7 @@ export function FinanceWorkspace() {
       >
         {(
           [
+            ["overview", "Overview"],
             ["ledger", "Transaction register"],
             ["reports", "Reports"],
             ["fees", "Student fees"],
@@ -421,7 +423,9 @@ export function FinanceWorkspace() {
                   {report.isFetching ? " · Updating…" : ""}
                 </p>
                 <FinanceTotals report={report.data} />
-                {tab === "ledger" ? (
+                {tab === "overview" ? (
+                  <FinanceOverview report={report.data} onViewRecord={setSelected} onOpenLedger={() => setTab("ledger")} />
+                ) : tab === "ledger" ? (
                   <>
                     <div className="rounded-xl border bg-card overflow-x-auto">
                       <table className="w-full text-sm">
@@ -604,6 +608,28 @@ export function FinanceWorkspace() {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function FinanceOverview({ report, onViewRecord, onOpenLedger }: { report: FinanceReport; onViewRecord: (entry: FinanceEntry) => void; onOpenLedger: () => void }) {
+  const recent = report.entries.filter((entry) => entry.status === "posted").slice(0, 6);
+  const categories = [...report.categories].sort((a, b) => b.amount_kobo - a.amount_kobo).slice(0, 6);
+  const largest = Math.max(1, ...categories.map((item) => item.amount_kobo));
+  const margin = report.income_kobo > 0 ? Math.round((report.net_kobo / report.income_kobo) * 100) : 0;
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+        <section className="rounded-xl border bg-card p-5">
+          <div className="flex items-center justify-between gap-3 mb-4"><div><h3 className="font-heading text-lg flex items-center gap-2"><LayoutDashboard size={18} className="text-primary" />Cash-flow overview</h3><p className="text-xs text-muted-foreground mt-1">Income, spending and net position for the selected period.</p></div><div className={`rounded-full px-3 py-1 text-xs font-semibold ${report.net_kobo >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>{margin}% net margin</div></div>
+          <FinanceCharts report={report} months={report.monthly} />
+        </section>
+        <section className="rounded-xl border bg-card p-5">
+          <h3 className="font-heading text-lg">Largest categories</h3><p className="text-xs text-muted-foreground mt-1 mb-5">Where money moved most during this period.</p>
+          <div className="space-y-4">{categories.map((item) => <div key={`${item.direction}-${item.category}`}><div className="flex justify-between gap-3 text-sm"><span className="truncate">{item.category}</span><span className={item.direction === "income" ? "text-emerald-700" : "text-rose-700"}>{money(item.amount_kobo)}</span></div><div className="mt-1 h-2 rounded-full bg-muted overflow-hidden"><div className={`h-full rounded-full ${item.direction === "income" ? "bg-emerald-500" : "bg-rose-500"}`} style={{ width: `${Math.max(4, (item.amount_kobo / largest) * 100)}%` }} /></div></div>)}{categories.length === 0 && <p className="py-12 text-center text-sm text-muted-foreground">No category activity yet.</p>}</div>
+        </section>
+      </div>
+      <section className="rounded-xl border bg-card overflow-hidden"><div className="flex items-center justify-between p-4 border-b"><div><h3 className="font-heading">Recent transactions</h3><p className="text-xs text-muted-foreground">Latest posted finance records.</p></div><Button variant="outline" size="sm" onClick={onOpenLedger}>View full register</Button></div><div className="divide-y">{recent.map((entry) => <button key={entry.id} onClick={() => onViewRecord(entry)} className="w-full flex items-center gap-4 p-4 text-left hover:bg-muted/50"><div className={`h-9 w-9 rounded-full flex items-center justify-center ${entry.direction === "income" ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>{entry.direction === "income" ? <ArrowDownLeft size={17} /> : <ArrowUpRight size={17} />}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{entry.description}</p><p className="truncate text-xs text-muted-foreground">{entry.counterparty} · {dateLabel(entry.transaction_date)}</p></div><span className={`text-sm font-semibold ${entry.direction === "income" ? "text-emerald-700" : "text-rose-700"}`}>{entry.direction === "income" ? "+" : "−"}{money(entry.amount_kobo)}</span></button>)}{recent.length === 0 && <p className="p-10 text-center text-sm text-muted-foreground">No recent transactions.</p>}</div></section>
     </div>
   );
 }
