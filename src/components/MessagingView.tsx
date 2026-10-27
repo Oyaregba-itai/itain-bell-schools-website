@@ -6,24 +6,33 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Send, MessageCircle, Check, Users } from "lucide-react";
+import { Send, MessageCircle, Check, Users, Mail } from "lucide-react";
 import { format } from "date-fns";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import GroupMessagingView from "@/components/GroupMessagingView";
 import { notifyUsers } from "@/lib/notifications";
+import InternalMail from "@/components/InternalMail";
+
+const db = supabase as any;
 
 const MessagingView = () => {
-  const [mode, setMode] = useState<"direct" | "groups">("direct");
+  const [mode, setMode] = useState<"mail" | "direct" | "groups">("mail");
 
   return (
     <div className="space-y-4">
       {/* Mode toggle */}
-      <div className="flex gap-1 bg-muted rounded-lg p-1 w-64">
+      <div className="flex gap-1 bg-muted rounded-lg p-1 w-full max-w-md">
+        <button
+          onClick={() => setMode("mail")}
+          className={`flex-1 flex items-center justify-center gap-1.5 text-sm py-2 rounded-md font-medium transition-colors ${mode === "mail" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        >
+          <Mail size={14} /> Internal Mail
+        </button>
         <button
           onClick={() => setMode("direct")}
           className={`flex-1 flex items-center justify-center gap-1.5 text-sm py-2 rounded-md font-medium transition-colors ${mode === "direct" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
         >
-          <MessageCircle size={14} /> Direct
+          <MessageCircle size={14} /> Chat
         </button>
         <button
           onClick={() => setMode("groups")}
@@ -33,7 +42,7 @@ const MessagingView = () => {
         </button>
       </div>
 
-      {mode === "direct" ? <DirectMessages /> : <GroupMessagingView />}
+      {mode === "mail" ? <InternalMail /> : mode === "direct" ? <DirectMessages /> : <GroupMessagingView />}
     </div>
   );
 };
@@ -58,8 +67,8 @@ const DirectMessages = () => {
     queryKey: ["conversations", user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      const { data: sent } = await supabase.from("messages").select("recipient_id").eq("sender_id", user.id);
-      const { data: received } = await supabase.from("messages").select("sender_id").eq("recipient_id", user.id);
+      const { data: sent } = await db.from("messages").select("recipient_id").eq("message_type", "chat").eq("sender_id", user.id);
+      const { data: received } = await db.from("messages").select("sender_id").eq("message_type", "chat").eq("recipient_id", user.id);
       const userIds = new Set([
         ...(sent || []).map((m: any) => m.recipient_id),
         ...(received || []).map((m: any) => m.sender_id),
@@ -74,15 +83,16 @@ const DirectMessages = () => {
     queryKey: ["messages", selectedUser?.user_id],
     queryFn: async () => {
       if (!selectedUser?.user_id || !user?.id) return [];
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("messages")
         .select("*")
+        .eq("message_type", "chat")
         .or(`and(sender_id.eq.${user.id},recipient_id.eq.${selectedUser.user_id}),and(sender_id.eq.${selectedUser.user_id},recipient_id.eq.${user.id})`)
         .order("created_at", { ascending: true });
       if (error) throw error;
       if (data) {
         const unreadIds = data.filter((m: any) => m.recipient_id === user.id && !m.read_at).map((m: any) => m.id);
-        if (unreadIds.length > 0) await supabase.from("messages").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
+        if (unreadIds.length > 0) await db.from("messages").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
       }
       return data || [];
     },
@@ -91,7 +101,7 @@ const DirectMessages = () => {
   const sendMessage = useMutation({
     mutationFn: async () => {
       if (!selectedUser?.user_id || !messageText.trim()) return;
-      const { error } = await supabase.from("messages").insert({ sender_id: user!.id, recipient_id: selectedUser.user_id, content: messageText });
+      const { error } = await db.from("messages").insert({ sender_id: user!.id, recipient_id: selectedUser.user_id, content: messageText, message_type: "chat" });
       if (error) throw error;
 
       // Send email notification to recipient
