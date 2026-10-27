@@ -55,8 +55,18 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
       let headOfSchoolSignatureUrl = "";
       let isCommentMode = false;
       let isHybridMode = false;
-      if (studentRes.data?.class_id) {
-        const { data: cls } = await supabase.from("classes").select("name, head_teacher_id, report_format").eq("id", studentRes.data.class_id).single();
+      let reportClassId = studentRes.data?.class_id || null;
+      if (termRes.data?.academic_year) {
+        const { data: historicalEnrollment } = await (supabase as any)
+          .from("student_enrollments")
+          .select("class_id")
+          .eq("student_id", studentId)
+          .eq("academic_year", termRes.data.academic_year)
+          .maybeSingle();
+        reportClassId = historicalEnrollment?.class_id || reportClassId;
+      }
+      if (reportClassId) {
+        const { data: cls } = await supabase.from("classes").select("name, head_teacher_id, report_format").eq("id", reportClassId).single();
         className = cls?.name || "—";
         isCommentMode = cls?.report_format === "comment";
         isHybridMode = cls?.report_format === "hybrid";
@@ -81,9 +91,20 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
       }
 
       // Class stats (highest/lowest per subject)
-      const classId = studentRes.data?.class_id;
-      const { data: classStudents } = await supabase.from("students").select("id").eq("class_id", classId);
-      const classStudentIds = (classStudents || []).map((s: any) => s.id);
+      const classId = reportClassId;
+      let classStudentIds: string[] = [];
+      if (termRes.data?.academic_year && classId) {
+        const { data: historicalClass } = await (supabase as any)
+          .from("student_enrollments")
+          .select("student_id")
+          .eq("class_id", classId)
+          .eq("academic_year", termRes.data.academic_year);
+        classStudentIds = (historicalClass || []).map((row: any) => row.student_id);
+      }
+      if (classStudentIds.length === 0 && classId) {
+        const { data: classStudents } = await supabase.from("students").select("id").eq("class_id", classId);
+        classStudentIds = (classStudents || []).map((s: any) => s.id);
+      }
       const { data: classResults } = await supabase.from("results").select("subject_id, total_score")
         .eq("term_id", termId).eq("result_type", resultType).in("student_id", classStudentIds);
 

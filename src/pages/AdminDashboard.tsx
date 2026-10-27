@@ -27,6 +27,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieCha
 import { compressImage } from "@/lib/imageUtils";
 import { logActivity } from "@/lib/activityLog";
 import { notifyUsers } from "@/lib/notifications";
+import { AlumniView, YearEndPromotion } from "@/components/YearEndPromotion";
 
 const NONE = "__none__"; // Unassigned teacher option in subject management.
 
@@ -81,6 +82,8 @@ const AdminDashboard = () => {
       {activeTab === "students" && <ManageStudents />}
       {activeTab === "subjects" && <ManageSubjects />}
       {activeTab === "terms" && <ManageTerms />}
+      {activeTab === "promotions" && <YearEndPromotion />}
+      {activeTab === "alumni" && <AlumniView />}
       {activeTab === "parents" && <ManageParents />}
       {activeTab === "admissions" && <ManageAdmissions />}
       {activeTab === "events" && <ManageEvents />}

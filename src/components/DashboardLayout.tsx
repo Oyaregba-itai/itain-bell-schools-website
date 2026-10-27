@@ -80,6 +80,8 @@ const DashboardLayout = ({ children, activeTab, onTabChange, extraTabs = [], tab
     { id: "parents", label: "Parents", icon: UserPlus },
     { id: "subjects", label: "Subjects", icon: BookOpen },
     { id: "terms", label: "Terms", icon: Calendar },
+    { id: "promotions", label: "Year-End Promotion", icon: GraduationCap },
+    { id: "alumni", label: "Alumni", icon: Users },
     { id: "events", label: "Events", icon: Calendar },
     { id: "results", label: "All Results", icon: BarChart3 },
     { id: "requests", label: "Requests", icon: ClipboardCheck },
