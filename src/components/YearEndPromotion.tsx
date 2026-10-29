@@ -108,7 +108,7 @@ export const YearEndPromotion = () => {
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-heading text-foreground">Year-End Promotion</h3>
-        <p className="text-sm text-muted-foreground mt-1">Promote Year 1–5 pupils and move Year 6 pupils into the alumni register.</p>
+        <p className="text-sm text-muted-foreground mt-1">Promote pupils from Explorers through Year 5, and move Year 6 pupils into the alumni register.</p>
       </div>
 
       <div className="bg-card rounded-xl shadow-card p-5 space-y-4">
@@ -150,7 +150,7 @@ export const YearEndPromotion = () => {
                 </div>;
               })}
             </div>
-            {missingDestination && <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"><AlertTriangle size={18} />A destination class is missing. Ensure Year 2 through Year 6 classes exist before continuing.</div>}
+            {missingDestination && <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"><AlertTriangle size={18} />A destination class is missing. Check the Early Years classes and Year 1 through Year 6 before continuing.</div>}
             <label className="flex items-start gap-3 rounded-lg border border-border p-4 text-sm cursor-pointer">
               <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-1" />
               <span><strong>I have reviewed this list.</strong><br /><span className="text-muted-foreground">This closes {selectedTerm?.academic_year}, updates current classes, creates the next Christmas Term, and cannot be run twice.</span></span>
