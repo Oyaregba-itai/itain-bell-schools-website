@@ -313,8 +313,8 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
       const nextTermName = yearTerms?.[termOrder + 1]?.name || "Next Term";
       const nextTermLabel = `${nextTermName} Begins`;
       const commentHtml = `<!DOCTYPE html><html><head><title>${studentName} — ${reportHeader}</title>
-      <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:12px}
-      @media print{body{padding:0}@page{margin:8mm;size:A4}}table{border-collapse:collapse}</style>
+      <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;font-weight:500;color:#000;padding:12px}table{border-collapse:collapse}
+      @media print{body{padding:0;font-size:12pt;font-weight:500;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}td{font-size:10.5pt!important;font-weight:500!important;color:#000;line-height:1.35}th{font-size:10.5pt!important;font-weight:800!important;color:#000;line-height:1.3}strong,b{font-weight:800!important}table{page-break-inside:auto}tr{page-break-inside:avoid;page-break-after:auto}@page{margin:9mm;size:A4}}</style>
       </head><body>
       <table style="width:100%;border:2px solid #333;margin-bottom:0"><tr>
         <td style="border:1px solid #333;padding:6px;text-align:center;width:75px" rowspan="2">
@@ -606,8 +606,8 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
     ${sharedComments}`;
 
     const html = `<!DOCTYPE html><html><head><title>${studentName} — ${reportHeader}</title>
-    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#111;padding:12px}
-    @media print{body{padding:0}@page{margin:6mm;size:A4}}table{border-collapse:collapse}</style>
+    <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;font-weight:500;color:#000;padding:12px}table{border-collapse:collapse}
+    @media print{body{padding:0;font-size:11pt;font-weight:500;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}td{font-size:8.5pt!important;font-weight:500!important;color:#000;line-height:1.25}th{font-size:8.5pt!important;font-weight:800!important;color:#000;line-height:1.2}strong,b{font-weight:800!important}table{page-break-inside:auto}tr{page-break-inside:avoid;page-break-after:auto}@page{margin:7mm;size:A4}}</style>
     </head><body>${htmlBody}</body></html>`;
 
     const win = window.open("", "_blank", "width=900,height=1100");
