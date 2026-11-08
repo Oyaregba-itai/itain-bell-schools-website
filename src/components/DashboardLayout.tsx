@@ -112,10 +112,10 @@ const DashboardLayout = ({ children, activeTab, onTabChange, extraTabs = [], tab
     { id: "announcements", label: "Announcements", icon: Megaphone },
   ];
 
-  const baseTabs = role === "admin" ? adminTabs : role === "teacher" ? teacherTabs : parentTabs;
+  const baseTabs = role === "admin" ? adminTabs : role === "teacher" || role === "receptionist" ? teacherTabs : parentTabs;
   const tabs = [...baseTabs, ...extraTabs];
 
-  const roleLabel = role === "admin" ? "Administrator" : role === "teacher" ? "Teacher" : "Parent";
+  const roleLabel = role === "admin" ? "Administrator" : role === "teacher" ? "Teacher" : role === "receptionist" ? "Receptionist" : "Parent";
 
   return (
     <div className="min-h-screen bg-background flex">

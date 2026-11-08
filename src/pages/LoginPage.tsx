@@ -13,6 +13,7 @@ const roleConfig: Record<string, { label: string; icon: React.ReactNode; color: 
   admin:        { label: "Administrator", icon: <Shield size={16} />,        color: "text-purple-700", bg: "bg-purple-100" },
   teacher:      { label: "Teacher",       icon: <BookOpen size={16} />,      color: "text-blue-700",   bg: "bg-blue-100"   },
   parent:       { label: "Parent",        icon: <GraduationCap size={16} />, color: "text-green-700",  bg: "bg-green-100"  },
+  receptionist: { label: "Receptionist",  icon: <Users size={16} />,         color: "text-rose-700",   bg: "bg-rose-100"   },
   creche_staff: { label: "Crèche Staff",  icon: <Users size={16} />,         color: "text-amber-700",  bg: "bg-amber-100"  },
 };
 

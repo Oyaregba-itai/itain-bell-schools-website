@@ -15,7 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-type Profile = { user_id: string; full_name: string; email?: string | null; role: "admin" | "teacher" | "parent" | "creche_staff" };
+type Profile = { user_id: string; full_name: string; email?: string | null; role: "admin" | "teacher" | "parent" | "creche_staff" | "receptionist" };
 type MailRow = { id: string; sender_id: string; recipient_id: string; subject: string | null; content: string; priority: "normal" | "important" | "urgent"; batch_id: string | null; read_at: string | null; created_at: string };
 
 const db = supabase as any;

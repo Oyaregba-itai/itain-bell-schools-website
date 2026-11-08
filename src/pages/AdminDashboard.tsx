@@ -866,6 +866,7 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
                         <SelectItem value="admin">Admin</SelectItem>
                         <SelectItem value="teacher">Teacher</SelectItem>
                         <SelectItem value="creche_staff">Crèche Staff</SelectItem>
+                        <SelectItem value="receptionist">Receptionist</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -957,6 +958,7 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="teacher">Teacher</SelectItem>
                   <SelectItem value="creche_staff">Crèche Staff</SelectItem>
+                  <SelectItem value="receptionist">Receptionist</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -3668,6 +3670,7 @@ const LiveReportCardPreview = ({
   const [selType, setSelType] = useState<"mid_term" | "end_of_term">("mid_term");
 
   const previewReady = !!(selStudent && selTerm);
+  const scoreOutOf = selType === "mid_term" ? 30 : 100;
 
   // Results for the selected student+term+type (for the edit panel)
   const filteredResults = allResults.filter((r: any) =>
@@ -3679,7 +3682,7 @@ const LiveReportCardPreview = ({
       const score = parseFloat(row.total_score) || 0;
       const { error } = await supabase.from("results").update({
         total_score: score,
-        grade_letter: getGradeLetterAdmin(score),
+        grade_letter: getGradeLetterAdmin(score, scoreOutOf),
         teacher_comments: row.teacher_comments || null,
       }).eq("id", row.id);
       if (error) throw error;
@@ -3792,14 +3795,14 @@ const LiveReportCardPreview = ({
                   <p className="text-xs font-medium text-foreground">{row.subjectName}</p>
                   <div className="flex gap-2 items-center">
                     <Input
-                      type="number" step="0.5" min="0" max="30"
+                      type="number" step="0.5" min="0" max={scoreOutOf}
                       value={row.total_score ?? ""}
                       onChange={e => { const next = [...editRows]; next[i] = { ...next[i], total_score: e.target.value }; setEditRows(next); }}
                       className="h-8 text-sm w-24"
-                      placeholder="Score /30"
+                      placeholder={`Score /${scoreOutOf}`}
                     />
-                    <span className="text-xs font-bold" style={{ color: row.total_score ? { A: "#7B2D8B", B: "#166534", C: "#1e40af", D: "#c2410c", E: "#b91c1c" }[getGradeLetterAdmin(parseFloat(row.total_score) || 0, selType === "mid_term" ? 30 : 70)[0]] || "#111" : "#999" }}>
-                      {row.total_score ? getGradeLetterAdmin(parseFloat(row.total_score) || 0, selType === "mid_term" ? 30 : 70) : "—"}
+                    <span className="text-xs font-bold" style={{ color: row.total_score ? { A: "#7B2D8B", B: "#166534", C: "#1e40af", D: "#c2410c", E: "#b91c1c" }[getGradeLetterAdmin(parseFloat(row.total_score) || 0, scoreOutOf)[0]] || "#111" : "#999" }}>
+                      {row.total_score ? getGradeLetterAdmin(parseFloat(row.total_score) || 0, scoreOutOf) : "—"}
                     </span>
                     <Button size="sm" className="h-8 text-xs hero-gradient ml-auto" onClick={() => updateResult.mutate(row)} disabled={updateResult.isPending}>
                       Save
