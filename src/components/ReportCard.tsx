@@ -26,6 +26,8 @@ const GRADE_SCALE = [
   { min: 0,   max: 59.9, letter: "E",  remark: "NME",         color: "#b91c1c", range: "0 – 59.9"  },
 ];
 
+const MIDTERM_RANGES = ["28.5 – 30", "27 – 28.49", "25.5 – 26.99", "24 – 25.49", "22.5 – 23.99", "21 – 22.49", "18 – 20.99", "0 – 17.99"];
+
 // All grade lookups now work on percentage (0–100)
 const getGradeInfo = (pct: number) =>
   GRADE_SCALE.find((g) => pct >= g.min && pct <= g.max) ?? GRADE_SCALE[GRADE_SCALE.length - 1];
@@ -34,6 +36,10 @@ const getGradeInfo = (pct: number) =>
 const rnd1 = (n: number) => parseFloat(n.toFixed(1));
 
 const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint }: ReportCardProps) => {
+  const displayGradeScale = GRADE_SCALE.map((grade, index) => ({
+    ...grade,
+    range: resultType === "mid_term" ? MIDTERM_RANGES[index] : grade.range,
+  }));
   const autoPrinted = useRef(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
@@ -294,7 +300,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
       </div>`;
     }).join("");
 
-    const gradeKeyRows = GRADE_SCALE.map(g =>
+    const gradeKeyRows = displayGradeScale.map(g =>
       `<tr><td style="padding:2px 5px;border:1px solid #ccc">${g.range}</td>
       <td style="padding:2px 5px;border:1px solid #ccc;text-align:center;font-weight:bold;color:${g.color}">${g.letter}</td>
       <td style="padding:2px 5px;border:1px solid #ccc">${g.remark}</td>
@@ -598,7 +604,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
         <br>
         <table style="width:100%;border-collapse:collapse;font-size:9px"><thead>
           <tr style="background:#333;color:white">
-            <th style="padding:3px 5px;text-align:left">Score %</th><th style="padding:3px 5px">Grade</th>
+            <th style="padding:3px 5px;text-align:left">${resultType === "mid_term" ? "Score" : "Score %"}</th><th style="padding:3px 5px">Grade</th>
             <th style="padding:3px 5px">Description</th><th style="padding:3px 5px">Colour</th>
           </tr></thead><tbody>${gradeKeyRows}</tbody></table>
         <div style="font-size:8px;margin-top:4px;color:#555">N.B: PTE means PROGRESSING TOWARDS EXPECTATION and NME means NOT MEETING EXPECTATION</div>
@@ -938,7 +944,7 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                   <th className="px-1 py-0.5">Colour</th>
                 </tr></thead>
                 <tbody>
-                  {GRADE_SCALE.map((g) => (
+                  {displayGradeScale.map((g) => (
                     <tr key={g.letter}>
                       <td className="border border-gray-300 px-0.5 py-0.5">{g.range}</td>
                       <td className="border border-gray-300 px-0.5 py-0.5 text-center font-bold" style={{ color: g.color }}>{g.letter}</td>
@@ -1040,13 +1046,13 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
                 <p className="text-[9px] font-bold mb-1.5 text-gray-700">Cognitive Domain Rating</p>
                 <table className="w-full border-collapse text-[8px]">
                   <thead><tr className="bg-gray-800 text-white">
-                    <th className="px-1 py-0.5 text-left">Score %</th>
+                    <th className="px-1 py-0.5 text-left">{resultType === "mid_term" ? "Score" : "Score %"}</th>
                     <th className="px-1 py-0.5">Grade</th>
                     <th className="px-1 py-0.5">Description</th>
                     <th className="px-1 py-0.5">Colour</th>
                   </tr></thead>
                   <tbody>
-                    {GRADE_SCALE.map((g) => (
+                    {displayGradeScale.map((g) => (
                       <tr key={g.letter}>
                         <td className="border border-gray-300 px-1 py-0.5">{g.range}</td>
                         <td className="border border-gray-300 px-1 py-0.5 text-center font-bold" style={{ color: g.color }}>{g.letter}</td>
@@ -1129,14 +1135,14 @@ const ReportCard = ({ studentId, termId, resultType, onClose, inline, autoPrint 
               <table className="w-full border-collapse text-[8px]">
                 <thead>
                   <tr className="bg-gray-800 text-white">
-                    <th className="px-1 py-0.5 text-left">Score %</th>
+                    <th className="px-1 py-0.5 text-left">{resultType === "mid_term" ? "Score" : "Score %"}</th>
                     <th className="px-1 py-0.5">Grade</th>
                     <th className="px-1 py-0.5">Description</th>
                     <th className="px-1 py-0.5">Colour</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {GRADE_SCALE.map((g) => (
+                  {displayGradeScale.map((g) => (
                     <tr key={g.letter}>
                       <td className="border border-gray-300 px-1 py-0.5">{g.range}</td>
                       <td className="border border-gray-300 px-1 py-0.5 text-center font-bold" style={{ color: g.color }}>{g.letter}</td>
