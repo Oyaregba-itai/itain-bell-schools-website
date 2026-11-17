@@ -2867,12 +2867,20 @@ const ManageParents = () => {
                   <td className="p-3">
                     {isSuperAdmin && (
                       <button
-                        onClick={() => { if (confirm(`Delete ${parent.full_name}? This cannot be undone.`)) deleteParent.mutate(parent); }}
+                        onClick={() => {
+                          const parentName = parent.full_name || parent.email || "this parent";
+                          const confirmed = window.confirm(
+                            `Permanently delete ${parentName}'s account? This will remove their login and unlink them from every child. This cannot be undone.`
+                          );
+                          if (confirmed) deleteParent.mutate(parent);
+                        }}
                         disabled={deleteParent.isPending}
-                        className="text-destructive hover:opacity-70 transition-opacity"
-                        title="Delete"
+                        className="inline-flex items-center gap-1.5 text-xs text-destructive hover:opacity-70 transition-opacity"
+                        title="Delete parent account permanently"
+                        aria-label={`Delete ${parent.full_name || parent.email || "parent"} account permanently`}
                       >
                         <Trash2 size={14} />
+                        <span>Delete account</span>
                       </button>
                     )}
                   </td>
