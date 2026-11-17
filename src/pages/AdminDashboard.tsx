@@ -1629,6 +1629,7 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
   const [linkingId, setLinkingId] = useState<string | null>(null);
+  const [removingParentId, setRemovingParentId] = useState<string | null>(null);
 
   const { data: allClassesList } = useQuery({
     queryKey: ["all-classes-for-edit"],
@@ -1848,6 +1849,33 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
     }
   };
 
+  const handleRemoveParent = async (parentId: string, parentName: string) => {
+    if (!window.confirm(`Remove ${parentName} from ${sName}? The parent account will not be deleted.`)) return;
+    setRemovingParentId(parentId);
+    try {
+      const { error } = await supabase.from("parent_students")
+        .delete()
+        .eq("parent_id", parentId)
+        .eq("student_id", studentId);
+      if (error) throw error;
+
+      // Clear the legacy single-parent link too, when it points to this parent.
+      const { error: legacyError } = await supabase.from("students")
+        .update({ parent_id: null })
+        .eq("id", studentId)
+        .eq("parent_id", parentId);
+      if (legacyError) throw legacyError;
+
+      toast({ title: "Parent removed", description: `${parentName} is no longer linked to ${sName}.` });
+      queryClient.invalidateQueries({ queryKey: ["student-profile", studentId] });
+      queryClient.invalidateQueries({ queryKey: ["all-students"] });
+    } catch (err: any) {
+      toast({ title: "Could not remove parent", description: err.message, variant: "destructive" });
+    } finally {
+      setRemovingParentId(null);
+    }
+  };
+
   if (isLoading) {
     return <div className="flex items-center justify-center p-16"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
   }
@@ -1990,10 +2018,22 @@ const StudentProfile = ({ studentId, onBack }: { studentId: string; onBack: () =
                   <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
                     {(p.full_name?.[0] || "?").toUpperCase()}
                   </div>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-foreground">{p.full_name}</p>
                     <p className="text-xs text-muted-foreground">{p.phone || "No phone on record"}</p>
                   </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => handleRemoveParent(p.user_id, p.full_name)}
+                    disabled={removingParentId === p.user_id}
+                    title={`Remove ${p.full_name} from this child`}
+                  >
+                    <Trash2 size={15} className="mr-1" />
+                    {removingParentId === p.user_id ? "Removing..." : "Remove"}
+                  </Button>
                 </div>
               ))}
             </div>
