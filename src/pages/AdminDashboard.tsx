@@ -787,7 +787,7 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
       const { data, error } = await supabase
         .from("students")
         .select("id, first_name, last_name, full_name, admission_number")
-        .order("full_name");
+        .order("first_name");
       if (error) throw error;
       return data || [];
     },
@@ -2780,11 +2780,11 @@ const ManageParents = () => {
         student_id: studentToAdd,
       });
       if (error) throw error;
-      return allStudentsForLinks.find((student: any) => student.id === studentToAdd);
+      return (allStudentsForLinks || []).find((student: any) => student.id === studentToAdd);
     },
     onSuccess: (student) => {
       if (student) {
-        setManagingParent((parent: any) => parent ? { ...parent, children: [...parent.children, student] } : parent);
+        setManagingParent((parent: any) => parent ? { ...parent, children: [...(parent.children || []), student] } : parent);
       }
       setStudentToAdd("");
       queryClient.invalidateQueries({ queryKey: ["all-parents"] });
@@ -2875,9 +2875,9 @@ const ManageParents = () => {
               Add or remove students linked to <strong className="text-foreground">{managingParent.full_name || managingParent.email}</strong>.
             </p>
             <div className="space-y-2">
-              {managingParent.children.length === 0 ? (
+              {(managingParent.children || []).length === 0 ? (
                 <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">No students linked yet.</p>
-              ) : managingParent.children.map((student: any) => (
+              ) : (managingParent.children || []).map((student: any) => (
                 <div key={student.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
                   <div>
                     <p className="text-sm font-medium text-foreground">{student.full_name || `${student.first_name || ""} ${student.last_name || ""}`.trim()}</p>
@@ -2905,8 +2905,8 @@ const ManageParents = () => {
               <Select value={studentToAdd} onValueChange={setStudentToAdd}>
                 <SelectTrigger><SelectValue placeholder="Choose a student" /></SelectTrigger>
                 <SelectContent>
-                  {allStudentsForLinks
-                    .filter((student: any) => !managingParent.children.some((child: any) => child.id === student.id))
+                  {(allStudentsForLinks || [])
+                    .filter((student: any) => !(managingParent.children || []).some((child: any) => child.id === student.id))
                     .map((student: any) => (
                       <SelectItem key={student.id} value={student.id}>
                         {student.full_name || `${student.first_name || ""} ${student.last_name || ""}`.trim()}
@@ -2972,10 +2972,10 @@ const ManageParents = () => {
                     }
                   </td>
                   <td className="p-3">
-                    {parent.children.length === 0
-                      ? <span className="text-xs text-amber-600">No children linked</span>
-                      : <div className="flex flex-wrap gap-1">
-                          {parent.children.map((c: any) => (
+                     {(parent.children || []).length === 0
+                       ? <span className="text-xs text-amber-600">No children linked</span>
+                       : <div className="flex flex-wrap gap-1">
+                           {(parent.children || []).map((c: any) => (
                             <span key={c.id} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
                               {c.full_name || `${c.first_name} ${c.last_name}`.trim()}
                             </span>
@@ -2986,7 +2986,7 @@ const ManageParents = () => {
                    <td className="p-3 text-muted-foreground">{new Date(parent.created_at).toLocaleDateString()}</td>
                    <td className="p-3">
                      <button
-                       onClick={() => { setManagingParent({ ...parent, children: [...parent.children] }); setStudentToAdd(""); }}
+                       onClick={() => { setManagingParent({ ...parent, children: [...(parent.children || [])] }); setStudentToAdd(""); }}
                        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
                        title="Manage linked students"
                      >
