@@ -778,6 +778,20 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
   const [resetPasswordFor, setResetPasswordFor] = useState<any | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [pwCopied, setPwCopied] = useState(false);
+  const [managingParent, setManagingParent] = useState<any | null>(null);
+  const [studentToAdd, setStudentToAdd] = useState("");
+
+  const { data: allStudentsForLinks = [] } = useQuery({
+    queryKey: ["all-students-for-parent-links"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("students")
+        .select("id, first_name, last_name, full_name, admission_number")
+        .order("full_name");
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   const resetPassword = useMutation({
     mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
@@ -2758,11 +2772,58 @@ const ManageParents = () => {
     setResetPasswordFor(parent);
   };
 
+  const addStudentToParent = useMutation({
+    mutationFn: async () => {
+      if (!managingParent || !studentToAdd) throw new Error("Select a student first");
+      const { error } = await supabase.from("parent_students").insert({
+        parent_id: managingParent.user_id,
+        student_id: studentToAdd,
+      });
+      if (error) throw error;
+      return allStudentsForLinks.find((student: any) => student.id === studentToAdd);
+    },
+    onSuccess: (student) => {
+      if (student) {
+        setManagingParent((parent: any) => parent ? { ...parent, children: [...parent.children, student] } : parent);
+      }
+      setStudentToAdd("");
+      queryClient.invalidateQueries({ queryKey: ["all-parents"] });
+      toast({ title: "Student linked", description: "The student was added to this parent." });
+    },
+    onError: (err: Error) => toast({ title: "Could not link student", description: err.message, variant: "destructive" }),
+  });
+
+  const removeStudentFromParent = useMutation({
+    mutationFn: async (student: any) => {
+      if (!managingParent) throw new Error("No parent selected");
+      const { error } = await supabase.from("parent_students")
+        .delete()
+        .eq("parent_id", managingParent.user_id)
+        .eq("student_id", student.id);
+      if (error) throw error;
+
+      // Also clear the legacy single-parent field when it points to this parent.
+      const { error: legacyError } = await supabase.from("students")
+        .update({ parent_id: null })
+        .eq("id", student.id)
+        .eq("parent_id", managingParent.user_id);
+      if (legacyError) throw legacyError;
+    },
+    onSuccess: (_data, student) => {
+      setManagingParent((parent: any) => parent
+        ? { ...parent, children: parent.children.filter((child: any) => child.id !== student.id) }
+        : parent);
+      queryClient.invalidateQueries({ queryKey: ["all-parents"] });
+      toast({ title: "Student unlinked", description: "The student was removed from this parent." });
+    },
+    onError: (err: Error) => toast({ title: "Could not unlink student", description: err.message, variant: "destructive" }),
+  });
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-heading text-foreground">Parents &amp; Guardians</h3>
-        <p className="text-sm text-muted-foreground">To add a parent, go to a student's profile and use "Add Parent / Guardian".</p>
+        <p className="text-sm text-muted-foreground">Manage parent accounts and their linked students.</p>
       </div>
 
       {/* Edit dialog */}
@@ -2803,6 +2864,71 @@ const ManageParents = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Manage linked students dialog */}
+      <Dialog open={!!managingParent} onOpenChange={open => { if (!open) { setManagingParent(null); setStudentToAdd(""); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Linked students</DialogTitle>
+          </DialogHeader>
+          {managingParent && <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Add or remove students linked to <strong className="text-foreground">{managingParent.full_name || managingParent.email}</strong>.
+            </p>
+            <div className="space-y-2">
+              {managingParent.children.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">No students linked yet.</p>
+              ) : managingParent.children.map((student: any) => (
+                <div key={student.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{student.full_name || `${student.first_name || ""} ${student.last_name || ""}`.trim()}</p>
+                    {student.admission_number && <p className="text-xs text-muted-foreground">{student.admission_number}</p>}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    disabled={removeStudentFromParent.isPending}
+                    onClick={() => {
+                      if (window.confirm(`Remove ${student.full_name || "this student"} from this parent?`)) {
+                        removeStudentFromParent.mutate(student);
+                      }
+                    }}
+                  >
+                    <X size={14} className="mr-1" /> Remove
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-border pt-4 space-y-2">
+              <Label>Add student</Label>
+              <Select value={studentToAdd} onValueChange={setStudentToAdd}>
+                <SelectTrigger><SelectValue placeholder="Choose a student" /></SelectTrigger>
+                <SelectContent>
+                  {allStudentsForLinks
+                    .filter((student: any) => !managingParent.children.some((child: any) => child.id === student.id))
+                    .map((student: any) => (
+                      <SelectItem key={student.id} value={student.id}>
+                        {student.full_name || `${student.first_name || ""} ${student.last_name || ""}`.trim()}
+                        {student.admission_number ? ` (${student.admission_number})` : ""}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                className="w-full hero-gradient"
+                disabled={!studentToAdd || addStudentToParent.isPending}
+                onClick={() => addStudentToParent.mutate()}
+              >
+                <UserPlus size={15} className="mr-2" />
+                {addStudentToParent.isPending ? "Adding..." : "Add student"}
+              </Button>
+            </div>
+          </div>}
+        </DialogContent>
+      </Dialog>
+
       {isLoading ? (
         <div className="space-y-3">{[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-muted rounded-xl animate-pulse" />)}</div>
       ) : !parents?.length ? (
@@ -2821,7 +2947,7 @@ const ManageParents = () => {
                 <th className="text-left p-3 font-medium text-muted-foreground">Password</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">Children</th>
                 <th className="text-left p-3 font-medium text-muted-foreground">Joined</th>
-                <th className="p-3" /><th className="p-3" /><th className="p-3" />
+                 <th className="p-3" /><th className="p-3" /><th className="p-3" /><th className="p-3" />
               </tr>
             </thead>
             <tbody>
@@ -2857,8 +2983,18 @@ const ManageParents = () => {
                         </div>
                     }
                   </td>
-                  <td className="p-3 text-muted-foreground">{new Date(parent.created_at).toLocaleDateString()}</td>
-                  <td className="p-3">
+                   <td className="p-3 text-muted-foreground">{new Date(parent.created_at).toLocaleDateString()}</td>
+                   <td className="p-3">
+                     <button
+                       onClick={() => { setManagingParent({ ...parent, children: [...parent.children] }); setStudentToAdd(""); }}
+                       className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+                       title="Manage linked students"
+                     >
+                       <UserPlus size={14} />
+                       <span>Edit students</span>
+                     </button>
+                   </td>
+                   <td className="p-3">
                     <button onClick={() => setEditing({ ...parent })} className="text-muted-foreground hover:text-primary transition-colors" title="Edit"><Pencil size={14} /></button>
                   </td>
                   <td className="p-3">
