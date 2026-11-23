@@ -778,21 +778,6 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
   const [resetPasswordFor, setResetPasswordFor] = useState<any | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [pwCopied, setPwCopied] = useState(false);
-  const [managingParent, setManagingParent] = useState<any | null>(null);
-  const [studentToAdd, setStudentToAdd] = useState("");
-
-  const { data: allStudentsForLinks = [] } = useQuery({
-    queryKey: ["all-students-for-parent-links"],
-    enabled: !!managingParent,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("students")
-        .select("id, first_name, last_name, admission_number")
-        .order("first_name");
-      if (error) throw error;
-      return data || [];
-    },
-  });
 
   const resetPassword = useMutation({
     mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
@@ -2677,6 +2662,21 @@ const ManageParents = () => {
   const [resetPasswordFor, setResetPasswordFor] = useState<any | null>(null);
   const [newPassword, setNewPassword] = useState("");
   const [pwCopied, setPwCopied] = useState(false);
+  const [managingParent, setManagingParent] = useState<any | null>(null);
+  const [studentToAdd, setStudentToAdd] = useState("");
+
+  const { data: allStudentsForLinks = [] } = useQuery({
+    queryKey: ["all-students-for-parent-links"],
+    enabled: !!managingParent,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("students")
+        .select("id, first_name, last_name, admission_number")
+        .order("first_name");
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   const { data: parents, isLoading } = useQuery({
     queryKey: ["all-parents"],
