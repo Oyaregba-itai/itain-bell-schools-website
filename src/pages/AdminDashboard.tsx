@@ -783,10 +783,11 @@ const UserList = ({ onView }: { onView: (user: any) => void }) => {
 
   const { data: allStudentsForLinks = [] } = useQuery({
     queryKey: ["all-students-for-parent-links"],
+    enabled: !!managingParent,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("students")
-        .select("id, first_name, last_name, full_name, admission_number")
+        .select("id, first_name, last_name, admission_number")
         .order("first_name");
       if (error) throw error;
       return data || [];
