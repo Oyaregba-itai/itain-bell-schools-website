@@ -2802,17 +2802,10 @@ const ManageParents = () => {
         .eq("parent_id", managingParent.user_id)
         .eq("student_id", student.id);
       if (error) throw error;
-
-      // Also clear the legacy single-parent field when it points to this parent.
-      const { error: legacyError } = await supabase.from("students")
-        .update({ parent_id: null })
-        .eq("id", student.id)
-        .eq("parent_id", managingParent.user_id);
-      if (legacyError) throw legacyError;
     },
     onSuccess: (_data, student) => {
       setManagingParent((parent: any) => parent
-        ? { ...parent, children: parent.children.filter((child: any) => child.id !== student.id) }
+        ? { ...parent, children: (parent.children || []).filter((child: any) => child.id !== student.id) }
         : parent);
       queryClient.invalidateQueries({ queryKey: ["all-parents"] });
       toast({ title: "Student unlinked", description: "The student was removed from this parent." });
